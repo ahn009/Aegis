@@ -50,7 +50,6 @@ export function WorkerStatus({ canTrigger }: { canTrigger: boolean }) {
       {justRan && <span className="text-[10px] text-emerald-600 animate-in fade-in">processed</span>}
       <Badge variant="outline" className={`gap-1.5 text-xs ${dead > 0 ? "border-red-200 bg-red-50 text-red-700" : hasWork ? "border-amber-200 bg-amber-50 text-amber-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`} title={`Queue: ${q.pending} pending · ${q.processing} processing · ${q.done} done · ${q.dead} dead. Last processed: ${status.lastProcessedAt ? fmtRelative(status.lastProcessedAt) : "never"}`}>
         {dead > 0 ? <AlertOctagon className="h-3 w-3" /> : hasWork ? <Cog className="h-3 w-3 animate-spin-slow" /> : <CheckCircle2 className="h-3 w-3" />}
-        <Cog className="h-3 w-3" />
         <span className="tabular-nums">{total}</span>
         {dead > 0 && <span className="text-red-600">·{dead} dead</span>}
       </Badge>

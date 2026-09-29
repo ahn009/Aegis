@@ -14,16 +14,15 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Velora HVAC Response System",
-  description: "Multi-tenant AI receptionist operations platform for residential HVAC. AI interprets — deterministic software controls.",
-  keywords: ["HVAC", "AI receptionist", "Velora", "call routing", "booking", "multi-tenant"],
+  title: "Velora | HVAC Operations",
+  description: "Manage HVAC calls, leads, and appointments in one workspace.",
   authors: [{ name: "Velora Automations" }],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/logo.svg",
   },
   openGraph: {
-    title: "Velora HVAC Response System",
-    description: "AI receptionist operations for residential HVAC.",
+    title: "Velora | HVAC Operations",
+    description: "Manage HVAC calls, leads, and appointments in one workspace.",
     siteName: "Velora",
     type: "website",
   },

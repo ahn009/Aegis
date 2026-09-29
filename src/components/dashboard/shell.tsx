@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { AuthUser, OrgInfo } from "@/app/page";
-import { api } from "@/lib/api-client";
 import { Overview } from "./overview";
 import { Calls } from "./calls";
 import { Contacts } from "./contacts";
@@ -15,10 +14,9 @@ import { Rules } from "./rules";
 import { WorkerStatus } from "./worker-status";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import {
   LayoutDashboard, Phone, Users, UserPlus, CalendarClock, ScrollText, BarChart3,
-  PhoneCall, BookOpen, LogOut, Menu, X, Cpu,
+  PhoneCall, BookOpen, LogOut, Menu, X,
 } from "lucide-react";
 
 type ViewId = "overview" | "calls" | "contacts" | "leads" | "appointments" | "audit" | "analytics" | "simulate" | "rules";
@@ -79,7 +77,6 @@ export function Shell({ user, org, onLogout }: { user: AuthUser; org: OrgInfo | 
                     >
                       <Icon className="h-4 w-4" />
                       {n.label}
-                      {n.id === "simulate" && <Badge variant="secondary" className="ml-auto text-[10px] h-4 px-1.5 bg-emerald-100 text-emerald-700">LIVE</Badge>}
                     </button>
                   );
                 })}
@@ -115,13 +112,7 @@ export function Shell({ user, org, onLogout }: { user: AuthUser; org: OrgInfo | 
                 <p className="text-xs text-muted-foreground">{org?.name ?? "—"} · {org?.timezone}</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <WorkerStatus canTrigger={["OWNER", "ADMIN"].includes(user.role)} />
-              <Badge variant="outline" className="gap-1.5 text-xs">
-                <Cpu className="h-3 w-3" /> MockProvider
-              </Badge>
-              <Badge variant="outline" className="text-xs">{user.role}</Badge>
-            </div>
+            <WorkerStatus canTrigger={["OWNER", "ADMIN"].includes(user.role)} />
           </header>
 
           <main className="flex-1 p-4 sm:p-6">
@@ -136,9 +127,6 @@ export function Shell({ user, org, onLogout }: { user: AuthUser; org: OrgInfo | 
             {view === "rules" && <Rules />}
           </main>
 
-          <footer className="border-t bg-white py-3 px-6 text-center text-xs text-muted-foreground">
-            Velora HVAC Response System · AI interprets, deterministic software controls · v1.0.0
-          </footer>
         </div>
       </div>
     </div>

@@ -5,12 +5,11 @@ import { api } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { PhoneCall, ShieldCheck, Loader2 } from "lucide-react";
+import { ArrowRight, Loader2, PhoneCall } from "lucide-react";
 
 export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
-  const [email, setEmail] = useState("owner@velorahvac.example");
-  const [password, setPassword] = useState("VeloraDemo2025!");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,76 +28,54 @@ export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <div className="flex-1 grid lg:grid-cols-2">
-        <div className="hidden lg:flex flex-col justify-between p-12 bg-zinc-900 text-zinc-50 relative overflow-hidden">
-          <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "radial-gradient(circle at 1px 1px, white 1px, transparent 0)", backgroundSize: "24px 24px" }} />
-          <div className="relative">
-            <div className="flex items-center gap-2.5">
-              <div className="h-10 w-10 rounded-xl bg-emerald-500 flex items-center justify-center">
-                <PhoneCall className="h-5 w-5 text-zinc-900" />
-              </div>
-              <span className="text-xl font-semibold tracking-tight">Velora</span>
-            </div>
-          </div>
-          <div className="relative space-y-5">
-            <h1 className="text-4xl font-semibold tracking-tight leading-tight">
-              The AI receptionist<br />that never books<br />out-of-area.
-            </h1>
-            <p className="text-zinc-400 text-lg max-w-md leading-relaxed">
-              Multi-tenant HVAC response operations. AI interprets the call — deterministic software controls every booking, transfer, and message.
-            </p>
-            <div className="flex flex-wrap gap-2 pt-2">
-              {["Double-booking protection", "Emergency escalation", "STOP suppression", "Audit trail"].map((f) => (
-                <span key={f} className="text-xs px-2.5 py-1 rounded-full bg-zinc-800 text-zinc-300 border border-zinc-700">{f}</span>
-              ))}
-            </div>
-          </div>
-          <div className="relative text-xs text-zinc-500">© Velora Automations — HVAC Response Platform v1.0</div>
+    <main className="min-h-screen bg-[#f7f8f6] text-zinc-900 lg:grid lg:grid-cols-[1fr_1fr]">
+      <section className="relative hidden min-h-screen flex-col justify-between overflow-hidden bg-[#112b25] p-10 text-white lg:flex xl:p-16">
+        <div className="absolute -right-28 -top-28 h-96 w-96 rounded-full border border-white/10" />
+        <div className="absolute -right-48 -top-48 h-[36rem] w-[36rem] rounded-full border border-white/10" />
+        <div className="relative flex items-center gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-400 text-[#112b25]"><PhoneCall className="h-5 w-5" /></span>
+          <span className="text-lg font-semibold tracking-tight">Velora</span>
         </div>
 
-        <div className="flex items-center justify-center p-6 sm:p-12">
-          <Card className="w-full max-w-sm shadow-sm">
-            <CardHeader className="space-y-2">
-              <div className="lg:hidden flex items-center gap-2 mb-2">
-                <div className="h-9 w-9 rounded-lg bg-emerald-500 flex items-center justify-center">
-                  <PhoneCall className="h-4 w-4 text-zinc-900" />
-                </div>
-                <span className="font-semibold">Velora</span>
-              </div>
-              <CardTitle className="text-2xl">Sign in</CardTitle>
-              <CardDescription>Access the operations dashboard.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={submit} className="space-y-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="password">Password</Label>
-                  <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
-                </div>
-                {error && (
-                  <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md px-3 py-2">{error}</div>
-                )}
-                <Button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white" disabled={loading}>
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <ShieldCheck className="h-4 w-4 mr-2" />}
-                  Sign in
-                </Button>
-                <div className="text-xs text-muted-foreground bg-muted/50 rounded-md p-3 leading-relaxed">
-                  <span className="font-medium text-foreground">Demo credentials (pre-seeded):</span><br />
-                  owner@velorahvac.example · VeloraDemo2025!<br />
-                  <span className="opacity-70">dispatcher@velorahvac.example · VeloraDemo2025!</span>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
+        <div className="relative max-w-xl pb-16">
+          <p className="mb-5 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">HVAC response, in one place</p>
+          <h2 className="text-5xl font-semibold leading-[1.08] tracking-tight xl:text-6xl">Every call deserves a clear next step.</h2>
+          <p className="mt-6 max-w-md text-lg leading-relaxed text-emerald-50/70">See your calls, follow up with leads, and keep appointments moving from one simple workspace.</p>
         </div>
-      </div>
-      <footer className="border-t bg-zinc-50 py-3 text-center text-xs text-muted-foreground">
-        Velora HVAC Response System — SOC2-aligned operations platform
-      </footer>
-    </div>
+        <p className="relative text-sm text-emerald-50/50">Velora Automations</p>
+      </section>
+
+      <section className="flex min-h-screen items-center justify-center px-5 py-12 sm:px-10">
+        <div className="w-full max-w-[420px]">
+          <div className="mb-12 flex items-center gap-3 lg:hidden">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white"><PhoneCall className="h-5 w-5" /></span>
+            <span className="text-lg font-semibold tracking-tight">Velora</span>
+          </div>
+          <p className="mb-2 text-sm font-medium text-emerald-700">Welcome back</p>
+          <h1 className="text-3xl font-semibold tracking-tight">Sign in to your workspace</h1>
+          <p className="mt-3 text-sm text-zinc-500">Manage your calls, leads, and schedule.</p>
+
+          <form onSubmit={submit} className="mt-9 space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email address</Label>
+              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" placeholder="you@company.com" className="h-11 bg-white" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" placeholder="Enter your password" className="h-11 bg-white" />
+            </div>
+            {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+            <Button type="submit" className="h-11 w-full justify-center bg-[#176b4a] text-white hover:bg-[#10573b]" disabled={loading}>
+              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Sign in
+              {!loading && <ArrowRight className="ml-2 h-4 w-4" />}
+            </Button>
+          </form>
+          <button type="button" className="mt-6 text-sm font-medium text-emerald-700 hover:underline" onClick={() => { setEmail("owner@velorahvac.example"); setPassword("VeloraDemo2025!"); setError(null); }}>
+            Fill demo credentials
+          </button>
+        </div>
+      </section>
+    </main>
   );
 }
