@@ -26,7 +26,7 @@ Legend: `open` = not started; `in_progress` = work underway; `blocked` = cannot 
 | P0-02 | 2 | open | Replace fake SMS `SENT` and audit-only staff notice | Provider message IDs, delivery/failure callbacks |
 | P0-03 | 1 | open | Authenticate all callbacks; map verified destination to tenant | Forged callback and wrong-tenant integration tests |
 | P0-04 | 1 | open | Validate production secrets and provider config at startup | Failing startup tests for missing/weak values |
-| P0-05 | 0 | in_progress | Verify CI on GitHub; local clean install, typecheck, lint, isolated tests, and webpack build pass | Passing CI run on pushed branch |
+| P0-05 | 0 | verified | Preserve CI gate as changes continue | [GitHub Actions run 36597887050](https://github.com/ahn009/Aegis/actions/runs/36597887050): clean install, Prisma generation, typecheck, lint, 13 tests, build pass |
 | P0-06 | 0 | in_progress | Review historical `.env`/database exposure and rotate any real credentials/sessions; bootstrap and demo-seed guard verified | No fixed credentials or fixture data in release artifact |
 | P0-07 | 1 | open | Persist selected organization in session | Multi-org login/switch/role tests |
 | P1-01 | 3 | open | Add atomic outbox claim and idempotent send | Two-worker race + crash/retry tests |
@@ -50,7 +50,7 @@ Legend: `open` = not started; `in_progress` = work underway; `blocked` = cannot 
 - [x] Record initial production gaps with source evidence in the plan.
 - [ ] Complete per-file line review register, including used UI controls and all route permissions.
 - [ ] Confirm launch scope, hosting, phone provider, AI provider, database, and deployment region.
-- [ ] Capture CI logs on the pushed branch. A **clean** lockfile install, local typecheck, lint, tests, and webpack build pass as recorded below.
+- [x] Capture CI logs on the pushed branch. A **clean** lockfile install, typecheck, lint, tests, and webpack build pass in [run 36597887050](https://github.com/ahn009/Aegis/actions/runs/36597887050).
 - [ ] Remove or isolate every production-facing demo/fake behavior and reconcile README claims. The demo login shortcut is now excluded from production builds.
 - [ ] Review historical `.env` and `db/custom.db` exposure, invalidate the stored session, and rotate any real values. Both files are now untracked and ignored locally; Git history is unchanged.
 
@@ -88,6 +88,8 @@ Legend: `open` = not started; `in_progress` = work underway; `blocked` = cannot 
 | 2026-09-29 | P0-06 bootstrap implementation and isolated check | Added `npm run bootstrap` for an empty database, requiring operator supplied organization/owner values, a valid timezone and a 16+ character password. It creates no fixed account or sample data. First run against `/tmp/velora-bootstrap-test-*/test.db` exited 0; a direct second run exited 1 with `Bootstrap requires an empty database`. The first combined subprocess check was inconclusive for the second run due sandbox `EPERM`; direct rerun resolved it. `rg` found no fixed demo credential in `.next/standalone` or `.next/static`. |
 | 2026-09-29 | Phase 0 history metadata | `git log -- .env db/custom.db` shows these files in four prior commits, including the initial commit; they are now untracked/ignored. History review and credential/session rotation remain required before release. |
 | 2026-09-29 | P0-05 GitHub CI run [36597229342](https://github.com/ahn009/Aegis/actions/runs/36597229342) | Clean `npm ci` and Prisma generation passed; `npm run typecheck` failed because `@types/node` was only available through local transitive dependencies. Lint, tests, and build were skipped. Added `@types/node` as a direct development dependency; a replacement CI run is required. |
+| 2026-09-29 | P0-05 replacement [GitHub CI run 36597887050](https://github.com/ahn009/Aegis/actions/runs/36597887050) | Passed: `npm ci --allow-remote=all`, Prisma generation, typecheck, lint, 13 isolated tests, and webpack production build. P0-05 verified. |
+| 2026-09-29 | P0-06 historical `.env` shape review | Historical `.env` versions contained only a `DATABASE_URL` key; no provider/app secret keys were present in that file. Values were not printed. The historical database still contains user/session material and remains a release blocker until assessed and invalidated as needed. |
 
 ## Update template
 
