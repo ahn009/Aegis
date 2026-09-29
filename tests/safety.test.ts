@@ -653,3 +653,63 @@ describe("9. hold expiry releases slot", () => {
 void confirmAppointment;
 void createDraftVersion;
 void publishVersion;
+
+// ============================================================================
+// 10. Lead status update — staff workflow action (DISPATCHER+) with audit.
+// The AI never calls this; it's a deterministic staff action. Org-scoped;
+// validates against the enum; cross-tenant update returns 404 (never reveals
+// existence); every update writes an append-only audit row.
+// ============================================================================
+describe("10. lead status update — staff workflow + audit", () => {
+  it("updates a lead's status and writes an audit row; rejects invalid status", async () => {
+    const phone = "+12145550010";
+    await upsertContactByPhone({ organizationId: orgId, phoneE164: phone, name: "Lead Status Test" });
+    const { createLead, updateLeadStatus, LEAD_STATUSES } = await import("../src/lib/domain/leads");
+    const lead = await createLead({
+      organizationId: orgId,
+      phoneE164: phone,
+      name: "Lead Status Test",
+      serviceType: "AC_REPAIR",
+      source: "CALL",
+      inServiceArea: true,
+    });
+    expect(lead.status).toBe("NEW");
+
+    // Valid update
+    const updated = await updateLeadStatus(orgId, lead.id, "CONTACTED", "staff-1");
+    expect(updated.status).toBe("CONTACTED");
+
+    // Audit row written
+    const auditRows = await db.auditLog.findMany({
+      where: { organizationId: orgId, entityType: "Lead", entityId: lead.id, action: "LEAD_STATUS_UPDATE" },
+    });
+    expect(auditRows.length).toBe(1);
+    expect(JSON.parse(auditRows[0]!.afterJson!)).toEqual({ status: "CONTACTED" });
+    expect(JSON.parse(auditRows[0]!.beforeJson!)).toEqual({ status: "NEW" });
+
+    // All enum values accepted
+    for (const s of LEAD_STATUSES) {
+      await updateLeadStatus(orgId, lead.id, s, "staff-1");
+    }
+    const final = await db.lead.findUnique({ where: { id: lead.id } });
+    expect(final?.status).toBe(LEAD_STATUSES[LEAD_STATUSES.length - 1]);
+
+    // Invalid status rejected
+    await expect(updateLeadStatus(orgId, lead.id, "BOGUS" as any, "staff-1")).rejects.toThrow();
+
+    // Cross-tenant update returns 404 (never reveals existence). Inline a
+    // second org to avoid relying on a separate setup module.
+    const orgB = await db.organization.create({
+      data: {
+        name: "Other HVAC Co",
+        slug: "other-hvac-" + randomToken(6).replace(/[^a-z0-9]/g, ""),
+        timezone: "America/Chicago",
+        defaultPhone: "+12145550200",
+        transferPhone: "+12145550299",
+        voicemailPhone: "+12145550288",
+        encryptedCreds: encrypt(JSON.stringify({})),
+      },
+    });
+    await expect(updateLeadStatus(orgB.id, lead.id, "BOOKED", "staff-2")).rejects.toThrow();
+  });
+});

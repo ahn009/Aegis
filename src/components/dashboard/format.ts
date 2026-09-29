@@ -12,6 +12,29 @@ export function fmtDateShort(iso: string | Date | null | undefined): string {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true }).format(d);
 }
 
+export function fmtTime(iso: string | Date | null | undefined): string {
+  if (!iso) return "—";
+  const d = typeof iso === "string" ? new Date(iso) : iso;
+  return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", hour12: true }).format(d);
+}
+
+/** Relative time like "3m ago", "2h ago", "just now". */
+export function fmtRelative(iso: string | Date | null | undefined): string {
+  if (!iso) return "—";
+  const d = typeof iso === "string" ? new Date(iso) : iso;
+  const diffMs = Date.now() - d.getTime();
+  const s = Math.floor(diffMs / 1000);
+  if (s < 10) return "just now";
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const days = Math.floor(h / 24);
+  if (days < 7) return `${days}d ago`;
+  return fmtDateShort(d);
+}
+
 export function fmtPhone(phone: string | null | undefined): string {
   if (!phone) return "—";
   const m = phone.match(/^\+(\d{1,3})(\d{3})(\d{3})(\d{4})$/);

@@ -1,6 +1,7 @@
 import { db } from "../db";
-import { auditAsAiTool } from "../audit";
+import { audit, auditAsAiTool } from "../audit";
 import { normalizePhone } from "../phone";
+import { ApiError } from "../errors";
 
 // ============================================================================
 // Lead service. SPEC: lead creation with deterministic service-area status.
@@ -8,6 +9,9 @@ import { normalizePhone } from "../phone";
 // (The tool executor overrides any AI-supplied inServiceArea with the
 // deterministic result.)
 // ============================================================================
+
+export const LEAD_STATUSES = ["NEW", "CONTACTED", "BOOKED", "LOST"] as const;
+export type LeadStatus = (typeof LEAD_STATUSES)[number];
 
 export interface CreateLeadInput {
   organizationId: string;
@@ -66,4 +70,45 @@ export async function listLeads(organizationId: string, opts: { status?: string;
     db.lead.count({ where }),
   ]);
   return { items, total };
+}
+
+/**
+ * Update a lead's status. Only the status field is mutable from the UI (and
+ * only by DISPATCHER+). The AI never calls this — lead status is a staff
+ * workflow action. Validated against the LEAD_STATUSES enum; org-scoped.
+ */
+export async function updateLeadStatus(
+  organizationId: string,
+  leadId: string,
+  status: LeadStatus,
+  actorId?: string,
+): Promise<{ id: string; status: LeadStatus }> {
+  if (!LEAD_STATUSES.includes(status)) {
+    throw new ApiError(422, `Invalid lead status. Allowed: ${LEAD_STATUSES.join(", ")}`, "VALIDATION");
+  }
+  const lead = await db.lead.findFirst({ where: { id: leadId, organizationId, deletedAt: null } });
+  if (!lead) throw new ApiError(404, "Lead not found", "NOT_FOUND");
+  if (lead.status === status) return { id: lead.id, status };
+  const before = { status: lead.status };
+  await db.lead.update({ where: { id: leadId }, data: { status } });
+  await audit({
+    organizationId,
+    actorType: "USER",
+    actorId: actorId ?? undefined,
+    action: "LEAD_STATUS_UPDATE",
+    entityType: "Lead",
+    entityId: leadId,
+    before,
+    after: { status },
+  });
+  return { id: leadId, status };
+}
+
+export async function getLead(organizationId: string, leadId: string) {
+  const lead = await db.lead.findFirst({
+    where: { id: leadId, organizationId, deletedAt: null },
+    include: { contact: true },
+  });
+  if (!lead) return null;
+  return lead;
 }

@@ -16,15 +16,22 @@ export function Calls() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [from, setFrom] = useState<string>("");
+  const [to, setTo] = useState<string>("");
   const [selected, setSelected] = useState<any | null>(null);
   const [detail, setDetail] = useState<any | null>(null);
 
   async function load() {
     setLoading(true);
-    const r = await api.calls({ limit: 100 }).catch(() => ({ items: [], total: 0 }));
+    const params: Record<string, string | number> = { limit: 100 };
+    if (statusFilter) params.status = statusFilter;
+    if (from) params.from = new Date(from).toISOString();
+    if (to) params.to = new Date(`${to}T23:59:59`).toISOString();
+    const r = await api.calls(params).catch(() => ({ items: [], total: 0 }));
     setItems(r.items); setTotal(r.total); setLoading(false);
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [statusFilter, from, to]);
 
   async function open(c: any) {
     setSelected(c);
@@ -44,10 +51,24 @@ export function Calls() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Search CallSid, phone, name…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-8 h-9" />
+        </div>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-9 rounded-md border bg-background px-2 text-sm">
+          <option value="">All statuses</option>
+          <option value="IN_PROGRESS">In progress</option>
+          <option value="COMPLETED">Completed</option>
+          <option value="MISSED">Missed</option>
+          <option value="VOICEMAIL">Voicemail</option>
+          <option value="TRANSFERRED">Transferred</option>
+          <option value="FAILED">Failed</option>
+        </select>
+        <div className="flex items-center gap-1.5">
+          <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-9 w-[140px] text-xs" aria-label="From date" />
+          <span className="text-xs text-muted-foreground">→</span>
+          <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-9 w-[140px] text-xs" aria-label="To date" />
         </div>
         <Button variant="outline" size="sm" onClick={load} disabled={loading}><RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${loading ? "animate-spin" : ""}`} />Refresh</Button>
         <Badge variant="outline" className="text-xs">{total} total</Badge>

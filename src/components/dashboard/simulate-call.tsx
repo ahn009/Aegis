@@ -90,7 +90,7 @@ export function SimulateCall() {
 
   if (phase === "idle") {
     return (
-      <div className="max-w-3xl mx-auto space-y-5">
+      <div className="max-w-5xl mx-auto space-y-5">
         <Card className="shadow-sm border-emerald-200 bg-gradient-to-br from-emerald-50 to-white">
           <CardContent className="p-6">
             <div className="flex items-start gap-4">
@@ -103,35 +103,76 @@ export function SimulateCall() {
           </CardContent>
         </Card>
 
-        <div>
-          <div className="text-xs font-medium text-muted-foreground mb-2">Choose a scenario</div>
-          <div className="grid sm:grid-cols-3 gap-3">
-            {SCENARIOS.map((s) => (
-              <button key={s.id} onClick={() => { setScenario(s.id); setPhone(s.phone); }} className={`text-left p-4 rounded-lg border-2 transition-all ${scenario === s.id ? "border-emerald-500 bg-emerald-50" : "border-zinc-200 bg-white hover:border-zinc-300"}`}>
-                <div className="flex items-center gap-2 mb-1">
-                  {s.id === "emergency" ? <AlertTriangle className="h-4 w-4 text-red-500" /> : s.id === "out_of_area" ? <PhoneOff className="h-4 w-4 text-amber-500" /> : <Phone className="h-4 w-4 text-emerald-500" />}
-                  <span className="font-medium text-sm">{s.label}</span>
-                </div>
-                <p className="text-xs text-muted-foreground">{s.hint}</p>
-                <p className="text-[10px] font-mono text-muted-foreground/70 mt-2">{s.phone}</p>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <Card className="shadow-sm">
-          <CardContent className="p-5 space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium">Caller phone (E.164)</label>
-              <Input value={phone} onChange={(e) => setPhone(e.target.value)} className="font-mono" />
+        <div className="grid lg:grid-cols-[1fr_360px] gap-5 items-start">
+          {/* Left: scenarios + start */}
+          <div className="space-y-5">
+            <div>
+              <div className="text-xs font-medium text-muted-foreground mb-2">Choose a scenario</div>
+              <div className="grid sm:grid-cols-3 gap-3">
+                {SCENARIOS.map((s) => (
+                  <button key={s.id} onClick={() => { setScenario(s.id); setPhone(s.phone); }} className={`text-left p-4 rounded-lg border-2 transition-all ${scenario === s.id ? "border-emerald-500 bg-emerald-50" : "border-zinc-200 bg-white hover:border-zinc-300"}`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      {s.id === "emergency" ? <AlertTriangle className="h-4 w-4 text-red-500" /> : s.id === "out_of_area" ? <PhoneOff className="h-4 w-4 text-amber-500" /> : <Phone className="h-4 w-4 text-emerald-500" />}
+                      <span className="font-medium text-sm">{s.label}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{s.hint}</p>
+                    <p className="text-[10px] font-mono text-muted-foreground/70 mt-2">{s.phone}</p>
+                  </button>
+                ))}
+              </div>
             </div>
-            {error && <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md px-3 py-2">{error}</div>}
-            <Button onClick={start} disabled={busy || !phone} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white">
-              {busy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <PhoneCall className="h-4 w-4 mr-2" />}
-              Start simulated call
-            </Button>
-          </CardContent>
-        </Card>
+
+            <Card className="shadow-sm">
+              <CardContent className="p-5 space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium">Caller phone (E.164)</label>
+                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} className="font-mono" />
+                </div>
+                {error && <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md px-3 py-2">{error}</div>}
+                <Button onClick={start} disabled={busy || !phone} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white">
+                  {busy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <PhoneCall className="h-4 w-4 mr-2" />}
+                  Start simulated call
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Right: how it works */}
+          <Card className="shadow-sm bg-zinc-50/50">
+            <CardContent className="p-5 space-y-4">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">How it works</div>
+                <ol className="space-y-2.5 text-xs text-muted-foreground">
+                  <li className="flex gap-2"><span className="h-4 w-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">1</span><span><span className="text-foreground font-medium">Inbound call</span> arrives via the voice webhook → a Call + Conversation are created (CallSid deduped).</span></li>
+                  <li className="flex gap-2"><span className="h-4 w-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">2</span><span><span className="text-foreground font-medium">Orchestrator</span> runs the deterministic emergency pre-check BEFORE the provider. If safety keywords match → immediate transfer.</span></li>
+                  <li className="flex gap-2"><span className="h-4 w-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">3</span><span><span className="text-foreground font-medium">MockProvider</span> emits assistant text + Zod-validated tool calls. The <span className="text-foreground font-medium">executor</span> re-derives service area, never trusts AI.</span></li>
+                  <li className="flex gap-2"><span className="h-4 w-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">4</span><span><span className="text-foreground font-medium">Domain services</span> book (transactional re-check) or request (120-min hold) or transfer (phone from rules, never AI).</span></li>
+                  <li className="flex gap-2"><span className="h-4 w-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">5</span><span>Every turn is <span className="text-foreground font-medium">persisted</span> (model, prompt_version, tokens, latency, cost) + audited.</span></li>
+                </ol>
+              </div>
+              <div className="border-t pt-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Conversation state machine</div>
+                <div className="flex flex-wrap gap-1 items-center">
+                  {["GREETING", "INTAKE", "AREA", "AVAIL", "BOOK", "REQUEST", "ESCAL", "VM", "END"].map((s, i, arr) => (
+                    <span key={s} className="flex items-center gap-1">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-white border border-zinc-200 text-zinc-600 font-medium">{s}</span>
+                      {i < arr.length - 1 && <span className="text-zinc-300 text-[10px]">→</span>}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-2 leading-relaxed">ESCALATION reachable from every state. Illegal transitions blocked in code, never by prompt alone.</p>
+              </div>
+              <div className="border-t pt-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Quick utterances available during the call</div>
+                <div className="flex flex-wrap gap-1">
+                  {QUICK_UTTERANCES.map((q) => (
+                    <span key={q} className="text-[10px] px-1.5 py-0.5 rounded-full bg-white border border-zinc-200 text-zinc-700 truncate max-w-[160px]">{q}</span>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }

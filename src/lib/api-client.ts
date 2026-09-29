@@ -23,8 +23,12 @@ export const api = {
   calls: (params: Record<string, string | number> = {}) => req<{ items: any[]; total: number }>(`/api/calls?${new URLSearchParams(params as any)}`),
   call: (id: string) => req<any>(`/api/calls/${id}`),
   contacts: (params: Record<string, string | number> = {}) => req<{ items: any[]; total: number }>(`/api/contacts?${new URLSearchParams(params as any)}`),
+  contact: (id: string) => req<{ contact: any; calls: any[]; leads: any[]; appointments: any[] }>(`/api/contacts/${id}`),
   leads: (params: Record<string, string | number> = {}) => req<{ items: any[]; total: number }>(`/api/leads?${new URLSearchParams(params as any)}`),
+  lead: (id: string) => req<any>(`/api/leads/${id}`),
+  updateLeadStatus: (id: string, status: string) => req<{ id: string; status: string }>(`/api/leads/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),
   appointments: (params: Record<string, string | number> = {}) => req<{ items: any[]; total: number }>(`/api/appointments?${new URLSearchParams(params as any)}`),
+  apptDetail: (id: string) => req<any>(`/api/appointments/${id}/detail`),
   confirmAppt: (id: string) => req<{ confirmed: boolean }>(`/api/appointments/${id}/confirm`, { method: "POST" }),
   cancelAppt: (id: string, reason: string) => req<{ cancelled: boolean }>(`/api/appointments/${id}/cancel`, { method: "POST", body: JSON.stringify({ reason }) }),
   audit: (params: Record<string, string | number> = {}) => req<{ items: any[]; total: number }>(`/api/audit?${new URLSearchParams(params as any)}`),
@@ -38,4 +42,5 @@ export const api = {
   simulateGet: (conversationId: string) => req<any>(`/api/simulate-call/${conversationId}`),
 
   runWorker: () => req<any>("/api/worker/run", { method: "POST" }),
+  workerStatus: () => req<any>("/api/worker/status"),
 };

@@ -12,6 +12,7 @@ import { Audit } from "./audit";
 import { Analytics } from "./analytics";
 import { SimulateCall } from "./simulate-call";
 import { Rules } from "./rules";
+import { WorkerStatus } from "./worker-status";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -115,6 +116,7 @@ export function Shell({ user, org, onLogout }: { user: AuthUser; org: OrgInfo | 
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <WorkerStatus canTrigger={["OWNER", "ADMIN"].includes(user.role)} />
               <Badge variant="outline" className="gap-1.5 text-xs">
                 <Cpu className="h-3 w-3" /> MockProvider
               </Badge>
