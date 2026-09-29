@@ -35,7 +35,7 @@ Legend: `open` = not started; `in_progress` = work underway; `blocked` = cannot 
 | P1-04 | 3 | open | Make appointment transitions and reminders durable | Confirmation race and crash tests |
 | P1-05 | 1 | open | Define mutation role matrix; enforce CSRF/origin | Viewer/technician denial and cross-site tests |
 | P1-06 | 1 | open | Add trusted-IP and unknown-account abuse controls | Rate-limit tests across accounts/instances |
-| P1-07 | 6 | open | Replace preview Caddy/deploy scripts | Environment-neutral staging deploy |
+| P1-07 | 6 | in_progress | Replace ignored preview scripts and retire or rewrite shell tests that reference them | Environment-neutral staging deploy |
 | P1-08 | 3 | open | Choose DB and write migrations/restore plan | Migration and restore evidence |
 | P1-09 | 4 | open | Define agent roles, tasks and approval policy | Approved design + task schema and policy tests |
 | P2-01 | 0 | in_progress | Reconcile remaining mock UI claims; hello-world endpoint removed | Route/UX check |
@@ -74,6 +74,7 @@ Legend: `open` = not started; `in_progress` = work underway; `blocked` = cannot 
 | 2026-09-29 | Dependency/build check | `node_modules` absent and `bun` unavailable; current build/test result unknown |
 | 2026-09-29 | Phase 0 cleanup: `next.config.ts`, login, seed, `/api`, README | Build no longer ignores TS errors; public hello-world route removed; demo shortcut hidden and demo seed disabled in production; README labels simulated paths. Runtime checks remain pending. |
 | 2026-09-29 | Tracked data review and containment | Read-only metadata: 3 organizations, 3 users, 1 session, 10 contacts, 5 calls, 7 SMS rows. `.env` and `db/custom.db` removed from Git index only, added to `.gitignore`, and preserved on disk. Historical exposure/rotation remains open. |
+| 2026-09-29 | P1-07 preview script containment | `.zscripts/` added to `.gitignore` and removed from the Git index; local files remain. Three shell tests under `tests/` still refer to these scripts and must be retired or rewritten before a clean-checkout test gate. |
 
 ## Update template
 

@@ -57,3 +57,6 @@ prompt
 server.log
 # Skills directory
 /skills/
+
+# Local preview/deployment helper scripts
+/.zscripts/
