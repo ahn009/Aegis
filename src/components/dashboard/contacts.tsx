@@ -18,12 +18,19 @@ export function Contacts() {
   const [detail, setDetail] = useState<any | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
+  function fetchItems() {
+    return api.contacts({ limit: 100, search }).catch(() => ({ items: [], total: 0 }));
+  }
   async function load() {
     setLoading(true);
-    const r = await api.contacts({ limit: 100, search }).catch(() => ({ items: [], total: 0 }));
+    const r = await fetchItems();
     setItems(r.items); setTotal(r.total); setLoading(false);
   }
-  useEffect(() => { load(); }, [search]);
+  useEffect(() => {
+    let active = true;
+    void fetchItems().then((r) => { if (active) { setItems(r.items); setTotal(r.total); setLoading(false); } });
+    return () => { active = false; };
+  }, [search]);
 
   async function openDetail(c: any) {
     setDetail(c); setDetailLoading(true);

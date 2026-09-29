@@ -93,7 +93,7 @@ function toOpenAIMessage(m: ProviderMessage): Record<string, unknown> {
       })),
     };
   }
-  return { role: m.role === "caller" ? "user" : m.role, content: m.content };
+  return { role: m.role, content: m.content };
 }
 
 function safeParseArgs(raw: string | undefined): unknown {

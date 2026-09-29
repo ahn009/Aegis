@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { validateRule, type AnyRule, type RuleType, RULE_TYPES } from "./schemas";
+import { validateRule, type AnyRule, type RuleType } from "./schemas";
 
 // ============================================================================
 // Versioned business-rule evaluation engine.
@@ -17,11 +17,14 @@ export interface PublishedRule<T = AnyRule> {
   publishedAt: Date | null;
 }
 
-export async function getPublishedRule<T extends AnyRule>(
+type RuleData<K extends RuleType> = Extract<AnyRule, { type: K }>;
+type PublishedRules = { [K in RuleType]: PublishedRule<RuleData<K>> | null };
+
+export async function getPublishedRule<K extends RuleType>(
   organizationId: string,
-  ruleType: RuleType,
+  ruleType: K,
   at: Date = new Date(),
-): Promise<PublishedRule<T> | null> {
+): Promise<PublishedRule<RuleData<K>> | null> {
   const row = await db.businessRuleVersion.findFirst({
     where: {
       organizationId,
@@ -32,7 +35,7 @@ export async function getPublishedRule<T extends AnyRule>(
     orderBy: { effectiveAt: "desc" },
   });
   if (!row) return null;
-  const data = validateRule(ruleType, JSON.parse(row.dataJson)) as T;
+  const data = validateRule(ruleType, JSON.parse(row.dataJson)) as RuleData<K>;
   return {
     id: row.id,
     organizationId,
@@ -45,23 +48,20 @@ export async function getPublishedRule<T extends AnyRule>(
 }
 
 export async function getAllPublishedRules(organizationId: string, at: Date = new Date()) {
-  const out: Record<RuleType, PublishedRule | null> = {
-    service_area: null,
-    business_hours: null,
-    holidays: null,
-    after_hours: null,
-    escalation_routing: null,
-    missed_call_recovery: null,
-  };
-  for (const t of RULE_TYPES) {
-    out[t] = await getPublishedRule(organizationId, t, at);
-  }
-  return out;
+  const [service_area, business_hours, holidays, after_hours, escalation_routing, missed_call_recovery] = await Promise.all([
+    getPublishedRule(organizationId, "service_area", at),
+    getPublishedRule(organizationId, "business_hours", at),
+    getPublishedRule(organizationId, "holidays", at),
+    getPublishedRule(organizationId, "after_hours", at),
+    getPublishedRule(organizationId, "escalation_routing", at),
+    getPublishedRule(organizationId, "missed_call_recovery", at),
+  ]);
+  return { service_area, business_hours, holidays, after_hours, escalation_routing, missed_call_recovery } satisfies PublishedRules;
 }
 
 export interface RuleContext {
   organizationId: string;
-  rules: Record<RuleType, PublishedRule | null>;
+  rules: PublishedRules;
 }
 
 export async function loadRuleContext(organizationId: string, at: Date = new Date()): Promise<RuleContext> {

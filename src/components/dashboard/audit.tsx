@@ -21,12 +21,19 @@ export function Audit() {
   const [actorType, setActorType] = useState("");
   const [search, setSearch] = useState("");
 
+  function fetchItems() {
+    return api.audit({ limit: 200, ...(action ? { action } : {}), ...(actorType ? { actorType } : {}) }).catch(() => ({ items: [], total: 0 }));
+  }
   async function load() {
     setLoading(true);
-    const r = await api.audit({ limit: 200, ...(action ? { action } : {}), ...(actorType ? { actorType } : {}) }).catch(() => ({ items: [], total: 0 }));
+    const r = await fetchItems();
     setItems(r.items); setTotal(r.total); setLoading(false);
   }
-  useEffect(() => { load(); }, [action, actorType]);
+  useEffect(() => {
+    let active = true;
+    void fetchItems().then((r) => { if (active) { setItems(r.items); setTotal(r.total); setLoading(false); } });
+    return () => { active = false; };
+  }, [action, actorType]);
 
   const filtered = items.filter((a) => !search || a.action.toLowerCase().includes(search.toLowerCase()) || (a.entityType ?? "").toLowerCase().includes(search.toLowerCase()));
 

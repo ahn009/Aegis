@@ -26,12 +26,19 @@ export function Leads() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
+  function fetchItems() {
+    return api.leads({ limit: 100, ...(status ? { status } : {}) }).catch(() => ({ items: [], total: 0 }));
+  }
   async function load() {
     setLoading(true);
-    const r = await api.leads({ limit: 100, ...(status ? { status } : {}) }).catch(() => ({ items: [], total: 0 }));
+    const r = await fetchItems();
     setItems(r.items); setTotal(r.total); setLoading(false);
   }
-  useEffect(() => { load(); }, [status]);
+  useEffect(() => {
+    let active = true;
+    void fetchItems().then((r) => { if (active) { setItems(r.items); setTotal(r.total); setLoading(false); } });
+    return () => { active = false; };
+  }, [status]);
 
   async function updateStatus(id: string, newStatus: string) {
     setBusyId(id);

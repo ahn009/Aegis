@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config";
+import { fileURLToPath } from "node:url";
 
 // Vitest config for the Velora HVAC safety-constraint suite.
 // - node environment (we exercise domain services + SQLite, no DOM)
@@ -14,7 +15,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@": "/home/z/my-project/src",
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
 });

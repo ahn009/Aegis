@@ -135,11 +135,11 @@ export async function runTurn(input: OrchestratorInput, provider: AiProvider): P
   } else {
     // 3. Build provider input (system prompt + history + tools + state + intake)
     const providerMessages: ProviderMessage[] = conv.messages.map((m) => ({
-      role: m.role as ProviderMessage["role"],
+      role: m.role === "caller" ? "user" : m.role as ProviderMessage["role"],
       content: m.content,
     }));
     // include the just-appended caller message
-    providerMessages.push({ role: "caller", content: input.callerUtterance });
+    providerMessages.push({ role: "user", content: input.callerUtterance });
 
     const providerInput: ProviderInput = {
       systemPrompt: systemPrompt(org.name, supportedServices),
@@ -258,7 +258,7 @@ export async function runTurn(input: OrchestratorInput, provider: AiProvider): P
       // Send booking confirmation SMS (STOP-suppressed at sender level)
       const appt = await db.appointment.findUnique({ where: { id: se.ref.entityId } });
       const contact = appt?.contactId ? await db.contact.findUnique({ where: { id: appt.contactId } }) : null;
-      if (contact) {
+      if (appt && contact) {
         const when = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true, timeZone: org.timezone }).format(appt.startTime);
         await sendSms(input.organizationId, contact.phoneE164, `Your ${appt.serviceType.replace(/_/g, " ").toLowerCase()} appointment is confirmed for ${when}. Reply STOP to opt out.`, "BOOKING_CONFIRMATION");
       }

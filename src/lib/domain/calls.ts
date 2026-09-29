@@ -21,8 +21,13 @@ export async function startInboundCall(input: InboundCallInput) {
   const fromPhone = normalizePhone(input.fromPhone);
   if (!fromPhone) throw new ApiError(422, "Invalid from phone", "VALIDATION");
   // Dedup on CallSid (SPEC: webhooks dedup on (provider, CallSid + event))
-  const existing = await db.call.findUnique({ where: { callSid: input.callSid } });
-  if (existing) return { call: existing, deduped: true };
+  const existing = await db.call.findUnique({ where: { callSid: input.callSid }, include: { conversation: true } });
+  if (existing) {
+    if (existing.organizationId !== input.organizationId || !existing.conversation) {
+      throw new ApiError(409, "Call cannot be resumed", "CONFLICT");
+    }
+    return { call: existing, conversation: existing.conversation, deduped: true };
+  }
   // Link contact if exists
   const contact = await db.contact.findUnique({
     where: { organizationId_phoneE164: { organizationId: input.organizationId, phoneE164: fromPhone } },

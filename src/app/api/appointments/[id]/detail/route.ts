@@ -10,9 +10,12 @@ export const GET = withApi(async ({ user, params }) => {
     where: { id, organizationId: user.organizationId, deletedAt: null },
     include: {
       contact: { select: { id: true, name: true, phoneE164: true, addressStreet: true, addressCity: true, addressState: true, addressZip: true, email: true } },
-      call: { select: { id: true, callSid: true, conversation: { select: { id: true, state: true, outcome: true } } } },
     },
   });
   if (!appt) throw ApiError.notFound("Appointment not found");
-  return Response.json(ok(appt));
+  const call = appt.callId ? await db.call.findFirst({
+    where: { id: appt.callId, organizationId: user.organizationId },
+    select: { id: true, callSid: true, conversation: { select: { id: true, state: true, outcome: true } } },
+  }) : null;
+  return Response.json(ok({ ...appt, call }));
 });

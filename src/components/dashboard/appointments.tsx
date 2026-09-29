@@ -32,12 +32,19 @@ export function Appointments() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  function fetchItems() {
+    return api.appointments({ limit: 100, ...(status ? { status } : {}), ...(from ? { from } : {}), ...(to ? { to } : {}) }).catch(() => ({ items: [], total: 0 }));
+  }
   async function load() {
     setLoading(true);
-    const r = await api.appointments({ limit: 100, ...(status ? { status } : {}), ...(from ? { from } : {}), ...(to ? { to } : {}) }).catch(() => ({ items: [], total: 0 }));
+    const r = await fetchItems();
     setItems(r.items); setTotal(r.total); setLoading(false);
   }
-  useEffect(() => { load(); }, [status, from, to]);
+  useEffect(() => {
+    let active = true;
+    void fetchItems().then((r) => { if (active) { setItems(r.items); setTotal(r.total); setLoading(false); } });
+    return () => { active = false; };
+  }, [status, from, to]);
 
   async function confirm(id: string) {
     setBusy(true);

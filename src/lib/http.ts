@@ -5,7 +5,7 @@ import { ApiError } from "./errors";
 // Re-export the route wrappers so API routes can import everything from "@/lib/http".
 export { withApi, withPublicApi, ok } from "./with-api";
 
-export type ApiHandler<T> = (req: NextRequest, ctx: { params: Promise<Record<string, string | string[]>> }) => Promise<NextResponse> | NextResponse;
+export type ApiHandler = (req: NextRequest, ctx: { params: Promise<Record<string, string | string[]>> }) => Promise<Response> | Response;
 
 export function json(body: unknown, init?: ResponseInit): NextResponse {
   return NextResponse.json(body, init);

@@ -12,7 +12,7 @@ Ship an AI-operated daily operations system that reports only real outcomes, pro
 
 This is a source audit, not a certification. I reviewed the application routes, auth/session boundary, webhook paths, AI provider/orchestrator/tool executor, domain services, worker, schema, seed, deployment scripts, UI placeholder scan, and existing tests. The repository has about 9,800 lines across these first-party paths. Generated `src/components/ui/*` controls are inventoried as vendor-style UI code; any component used by a product screen must still pass interaction and accessibility checks. A file-by-file review register is below so the remaining line review is explicit rather than implied.
 
-No dependencies are installed in this checkout, and `bun` is unavailable here. The prior dependency install attempts did not complete. Build, lint, typecheck, and application tests are **unverified** in this environment. Existing test descriptions are evidence of intent, not a current pass result.
+Dependencies are now present in this checkout, but a clean lockfile install is still unverified and `bun` is unavailable here. On 2026-09-29, the isolated test runner passed 13 tests; TypeScript and lint passed; a webpack production build completed outside the sandbox. The default Turbopack build hit a sandbox process restriction, so the build script now selects webpack. These results are a baseline, not a production release gate.
 
 ### Verified production gaps
 

@@ -27,12 +27,19 @@ export function Rules() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
 
+  function fetchItems() {
+    return api.rules().catch(() => ({ items: [], ruleTypes: [] }));
+  }
   async function load() {
     setLoading(true);
-    const r = await api.rules().catch(() => ({ items: [], ruleTypes: [] }));
+    const r = await fetchItems();
     setItems(r.items); setLoading(false);
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    let active = true;
+    void fetchItems().then((r) => { if (active) { setItems(r.items); setLoading(false); } });
+    return () => { active = false; };
+  }, []);
 
   async function publish(id: string) {
     setBusy(id);

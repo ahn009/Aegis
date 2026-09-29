@@ -7,7 +7,6 @@ const POLL_MS = 15_000;
 
 async function loop() {
   console.log("[worker] outbox processor started (poll every %dms)", POLL_MS);
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
       const res = await processOutbox(100);

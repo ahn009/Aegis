@@ -22,16 +22,23 @@ export function Calls() {
   const [selected, setSelected] = useState<any | null>(null);
   const [detail, setDetail] = useState<any | null>(null);
 
-  async function load() {
-    setLoading(true);
+  function fetchItems() {
     const params: Record<string, string | number> = { limit: 100 };
     if (statusFilter) params.status = statusFilter;
     if (from) params.from = new Date(from).toISOString();
     if (to) params.to = new Date(`${to}T23:59:59`).toISOString();
-    const r = await api.calls(params).catch(() => ({ items: [], total: 0 }));
+    return api.calls(params).catch(() => ({ items: [], total: 0 }));
+  }
+  async function load() {
+    setLoading(true);
+    const r = await fetchItems();
     setItems(r.items); setTotal(r.total); setLoading(false);
   }
-  useEffect(() => { load(); }, [statusFilter, from, to]);
+  useEffect(() => {
+    let active = true;
+    void fetchItems().then((r) => { if (active) { setItems(r.items); setTotal(r.total); setLoading(false); } });
+    return () => { active = false; };
+  }, [statusFilter, from, to]);
 
   async function open(c: any) {
     setSelected(c);

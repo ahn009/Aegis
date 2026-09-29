@@ -26,7 +26,7 @@ Legend: `open` = not started; `in_progress` = work underway; `blocked` = cannot 
 | P0-02 | 2 | open | Replace fake SMS `SENT` and audit-only staff notice | Provider message IDs, delivery/failure callbacks |
 | P0-03 | 1 | open | Authenticate all callbacks; map verified destination to tenant | Forged callback and wrong-tenant integration tests |
 | P0-04 | 1 | open | Validate production secrets and provider config at startup | Failing startup tests for missing/weak values |
-| P0-05 | 0 | in_progress | Add CI and run clean typecheck/build; `ignoreBuildErrors` removed | `typecheck`, lint, tests, build logs in CI |
+| P0-05 | 0 | in_progress | Add CI and clean-install gate; local typecheck, lint, isolated tests, and webpack build pass | `typecheck`, lint, tests, build logs in CI |
 | P0-06 | 0 | in_progress | Build production bootstrap; review Git history and rotate any real credentials/sessions. Demo seed now refuses `NODE_ENV=production`. | No fixed credentials or fixture data in release artifact |
 | P0-07 | 1 | open | Persist selected organization in session | Multi-org login/switch/role tests |
 | P1-01 | 3 | open | Add atomic outbox claim and idempotent send | Two-worker race + crash/retry tests |
@@ -41,7 +41,7 @@ Legend: `open` = not started; `in_progress` = work underway; `blocked` = cannot 
 | P2-01 | 0 | in_progress | Reconcile remaining mock UI claims; hello-world endpoint removed | Route/UX check |
 | P2-02 | 3 | open | Remove fixed timezone and stale holidays | Org timezone/DST tests |
 | P2-03 | 6 | open | Decide robots/security headers/cache policy | Header and crawler checks |
-| P2-04 | 0 | open | Inventory imports; pin runtime/install | Lockfile-based clean install |
+| P2-04 | 0 | in_progress | Pin one runtime/install path; build/start now use Node, but seed/worker scripts still require Bun | Lockfile-based clean install |
 
 ## Phase 0 checklist
 
@@ -49,7 +49,7 @@ Legend: `open` = not started; `in_progress` = work underway; `blocked` = cannot 
 - [x] Record initial production gaps with source evidence in the plan.
 - [ ] Complete per-file line review register, including used UI controls and all route permissions.
 - [ ] Confirm launch scope, hosting, phone provider, AI provider, database, and deployment region.
-- [ ] Run clean install, typecheck, lint, tests, and build; save exact commands and results.
+- [ ] Run a **clean** lockfile install and capture CI logs. Local typecheck, lint, tests, and webpack build now pass as recorded below.
 - [ ] Remove or isolate every production-facing demo/fake behavior and reconcile README claims. The demo login shortcut is now excluded from production builds.
 - [ ] Review historical `.env` and `db/custom.db` exposure, invalidate the stored session, and rotate any real values. Both files are now untracked and ignored locally; Git history is unchanged.
 
@@ -75,6 +75,9 @@ Legend: `open` = not started; `in_progress` = work underway; `blocked` = cannot 
 | 2026-09-29 | Phase 0 cleanup: `next.config.ts`, login, seed, `/api`, README | Build no longer ignores TS errors; public hello-world route removed; demo shortcut hidden and demo seed disabled in production; README labels simulated paths. Runtime checks remain pending. |
 | 2026-09-29 | Tracked data review and containment | Read-only metadata: 3 organizations, 3 users, 1 session, 10 contacts, 5 calls, 7 SMS rows. `.env` and `db/custom.db` removed from Git index only, added to `.gitignore`, and preserved on disk. Historical exposure/rotation remains open. |
 | 2026-09-29 | P1-07 preview script containment | `.zscripts/` added to `.gitignore` and removed from the Git index; local files remain. Three shell tests under `tests/` still refer to these scripts and must be retired or rewritten before a clean-checkout test gate. |
+| 2026-09-29 | Test safety, `vitest.config.ts`, `tests/setup.ts`, `scripts/run-tests.mjs`, `package.json` | `npm test` creates a fresh `/tmp/velora-test-*/test.db`, pushes schema, and refuses a non-test DB in setup. 13/13 tests pass. Local `.env` database was not touched. |
+| 2026-09-29 | Type and lint baseline, shared API/rules types and dashboard effects | `npm run typecheck` exit 0; `npm run lint` exit 0. Initial failures included wrong API wrapper response types, untyped rule map, hardcoded test alias, and effect lint errors. |
+| 2026-09-29 | Build baseline, `src/app/layout.tsx`, `src/app/globals.css`, `package.json` | `DATABASE_URL=file:/tmp/velora-build.db NEXT_TELEMETRY_DISABLED=1 ./node_modules/.bin/next build --webpack` exit 0 outside sandbox. System fonts remove build-time Google font fetch. Build script now uses webpack and standalone start uses Node; a clean install and full script run remain open. |
 
 ## Update template
 

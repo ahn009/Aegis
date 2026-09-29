@@ -63,6 +63,10 @@ const TABLES = [
 ];
 
 async function resetDb() {
+  const url = process.env.DATABASE_URL ?? "";
+  if (process.env.VELORA_TEST_DATABASE !== "1" || !/^file:\/.*\/velora-test-[^/]+\/test\.db$/.test(url)) {
+    throw new Error("Refusing to reset a non-isolated database. Run tests through npm test.");
+  }
   await db.$executeRawUnsafe("PRAGMA foreign_keys=OFF");
   for (const t of TABLES) {
     await db.$executeRawUnsafe(`DELETE FROM "${t}";`);

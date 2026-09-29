@@ -5,7 +5,7 @@ import { withApi, parseBody } from "@/lib/http";
 import { requireRole } from "@/lib/auth-context";
 
 const StatusSchema = z.object({
-  status: z.enum(LEAD_STATUSES as [string, ...string[]]),
+  status: z.enum(LEAD_STATUSES),
 });
 
 // PATCH /api/leads/[id]/status — update a lead's status (DISPATCHER+).

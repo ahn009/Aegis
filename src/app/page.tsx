@@ -31,8 +31,14 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    refreshMe();
-  }, [refreshMe]);
+    void api.me().then((data) => {
+      setUser(data.user);
+      setOrg(data.organization ?? null);
+    }).catch((e) => {
+      setBootError((e as Error).message);
+      setUser(null);
+    });
+  }, []);
 
   if (user === undefined) {
     return (

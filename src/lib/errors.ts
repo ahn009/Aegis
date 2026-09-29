@@ -2,7 +2,9 @@ export type ApiErrorCode =
   | "BAD_REQUEST"
   | "VALIDATION"
   | "UNAUTHORIZED"
+  | "NO_SESSION"
   | "FORBIDDEN"
+  | "FORBIDDEN_ROLE"
   | "NOT_FOUND"
   | "CONFLICT"
   | "RATE_LIMITED"
@@ -58,11 +60,10 @@ export function ok<T>(data: T): ApiOk<T> {
 
 export function errorBody(err: unknown) {
   if (err instanceof ApiError) {
-    const body: Record<string, unknown> = {
+    const body = {
       ok: false,
-      error: { code: err.code, message: err.message },
+      error: { code: err.code, message: err.message, details: err.details },
     };
-    if (err.details !== undefined) body.error.details = err.details;
     return { status: err.status, body };
   }
   console.error("[unhandled]", err);

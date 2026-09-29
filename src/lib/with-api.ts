@@ -9,18 +9,18 @@ type HandlerCtx = {
   req: NextRequest;
 };
 
-type AuthedHandler<T> = (ctx: HandlerCtx) => Promise<NextResponse> | NextResponse;
+type AuthedHandler = (ctx: HandlerCtx) => Promise<Response> | Response;
 
 /**
  * Wraps an API handler with: session resolution, error → JSON mapping, and
  * (optional) RBAC. Every authenticated route MUST go through this so tenancy
  * context (user.organizationId) is always present.
  */
-export function withApi<T>(handler: AuthedHandler<T>, opts?: { role?: Role }) {
+export function withApi(handler: AuthedHandler, opts?: { role?: Role }) {
   return async (
     req: NextRequest,
     ctx: { params: Promise<Record<string, string | string[]>> },
-  ): Promise<NextResponse> => {
+  ): Promise<Response> => {
     try {
       const params = await ctx.params;
       const user = await getSessionUser();
@@ -36,11 +36,11 @@ export function withApi<T>(handler: AuthedHandler<T>, opts?: { role?: Role }) {
 }
 
 /** Public route wrapper (no auth) with error handling only. */
-export function withPublicApi<T>(handler: (req: NextRequest, ctx: { params: Promise<Record<string, string | string[]>> }) => Promise<NextResponse> | NextResponse) {
+export function withPublicApi(handler: (req: NextRequest, ctx: { params: Promise<Record<string, string | string[]>> }) => Promise<Response> | Response) {
   return async (
     req: NextRequest,
     ctx: { params: Promise<Record<string, string | string[]>> },
-  ): Promise<NextResponse> => {
+  ): Promise<Response> => {
     try {
       return await handler(req, ctx);
     } catch (err) {
