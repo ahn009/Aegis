@@ -12,6 +12,9 @@ import { createDraftVersion, publishVersion } from "../src/lib/rules/engine";
 import { randomToken } from "../src/lib/crypto";
 
 async function main() {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("The demo seed is disabled in production. Use the production bootstrap workflow.");
+  }
   console.log("🌱 Seeding Velora HVAC Response System...\n");
 
   // --- Owner user ----------------------------------------------------------

@@ -71,9 +71,11 @@ export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
               {!loading && <ArrowRight className="ml-2 h-4 w-4" />}
             </Button>
           </form>
-          <button type="button" className="mt-6 text-sm font-medium text-emerald-700 hover:underline" onClick={() => { setEmail("owner@velorahvac.example"); setPassword("VeloraDemo2025!"); setError(null); }}>
-            Fill demo credentials
-          </button>
+          {process.env.NODE_ENV !== "production" && (
+            <button type="button" className="mt-6 text-sm font-medium text-emerald-700 hover:underline" onClick={() => { setEmail("owner@velorahvac.example"); setPassword("VeloraDemo2025!"); setError(null); }}>
+              Fill demo credentials
+            </button>
+          )}
         </div>
       </section>
     </main>

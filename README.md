@@ -8,28 +8,32 @@ A multi-tenant, AI-receptionist operations platform for residential HVAC compani
 > SMS) executes in a validated domain service with server-side org context. All AI output
 > is treated as untrusted input.
 
-Built to the **Velora HVAC Response System Engineering Specification v1.0.0**, adapted to
-the deployment environment (Next.js 16 + Prisma/SQLite). Every HARD CONSTRAINT is
-implemented and proven by an automated test suite. See `docs/adr/` for adaptation
-decisions.
+This repository is a **development prototype**, not a live receptionist or production
+deployment. Voice, outbound SMS, transfer, and staff notification are simulated or
+record-only today. The production gaps, phase gates, and current verification status are
+tracked in [the production build plan](docs/production-build-plan.md) and
+[work tracker](docs/production-tracker.md). See `docs/adr/` for earlier adaptation decisions.
 
 ---
 
 ## Quickstart
 
 ```bash
-# 1. Install deps (already done in this env)
+# 1. Install dependencies
 bun install
 
-# 2. Push the schema + run the seed (creates the DFW HVAC org, owner user, rules, sample contacts)
+# 2. Create a local environment file and set DATABASE_URL for this checkout
+cp .env.example .env
+
+# 3. Push the schema + run the development seed (creates sample data)
 bun run db:push
 bun run seed
 # → prints OWNER credentials: owner@velorahvac.example / VeloraDemo2025!
 
-# 3. Start the dev server (Next.js, port 3000)
+# 4. Start the dev server (Next.js, port 3000)
 bun run dev
 
-# 4. Open the dashboard at / and sign in with the seeded credentials.
+# 5. Open the dashboard at / and sign in with the seeded credentials.
 ```
 
 ### Drive a full conversation with no Twilio/OpenAI
@@ -50,7 +54,7 @@ bun run worker                    # standalone polling loop
 ### Run the safety test suite
 
 ```bash
-bun run test                      # vitest — 12 tests covering every HARD CONSTRAINT
+bun run test                      # run the current safety tests locally
 ```
 
 ---
@@ -63,7 +67,7 @@ bun run test                      # vitest — 12 tests covering every HARD CONS
 | Twilio voice/SMS | **Simulated** via API webhooks. Signature verification implemented (`src/lib/webhook-security.ts`), gated behind `VELORA_VERIFY_WEBHOOKS=1`. |
 | STT/TTS          | N/A — the simulator is text-in/text-out. Real STT/TTS would slot into the voice-gateway routes. |
 | Database         | **Real** SQLite via Prisma. All tenancy, audit, booking, opt-out logic is live. |
-| Worker/Queues    | **Real** outbox table + polling worker (in-process or standalone). At-least-once + idempotency keys. |
+| Worker/Queues    | Outbox table + polling worker. Atomic claims and provider-level idempotency are still needed for production. |
 | Jobber/Housecall Pro CRM | **Interface only** — `externalCrmId` field + no-op adapter (out of scope per SPEC). |
 | Google/Microsoft OAuth     | Interface/scaffold only (out of scope per SPEC). |
 | pgvector         | Not used; Postgres FTS replaced by SQLite `LIKE` (ADR 0001). |
@@ -99,13 +103,13 @@ scripts/
   seed.ts                     # DFW HVAC org + owner + rules + sample contacts
   simulate-call.ts            # end-to-end conversation driver (no external accounts)
   worker.ts                   # standalone outbox worker
-tests/safety.test.ts          # 12 tests proving every HARD CONSTRAINT
+tests/safety.test.ts          # prototype safety tests (run before relying on results)
 docs/adr/                     # 5 architecture decision records
 ```
 
 ---
 
-## HARD CONSTRAINTS — how each is enforced
+## Current safeguards — production review still required
 
 1. **Tenancy** — every domain query filters by `organization_id` from the session, never
    client input. `orgScope()` + `assertTenant()` enforce it. Test §3 proves cross-tenant
@@ -121,14 +125,15 @@ docs/adr/                     # 5 architecture decision records
    Unreachable → voicemail + staff notification + persisted follow-up. Test §5.
 5. **Booking** — transactional overlap re-check inside a write transaction; SQLite
    serializes writers so the re-check is atomic. Exactly-one-winner proven by Test §1.
-6. **Webhooks** — signature verification (`webhook-security.ts`) + dedup on
-   `(provider, externalId)`. Tests §4.
+6. **Webhooks** — optional shared-secret verification in voice/SMS and dedup on
+   `(provider, externalId)`. The status callback is unverified and tenant resolution is unsafe
+   for live use; see P0-03 in the production plan.
 7. **Conversation state machine** — `assertTransition()` blocks illegal transitions in
    code, never by prompt alone. ESCALATION reachable from every state.
 8. **Audit** — append-only `AuditLog`; no UPDATE/DELETE endpoints exist. Every mutation
    (USER / AI_TOOL / WORKER) writes one row. PII redacted.
-9. **Safe degradation** — every external dependency has a fallback. AI failure mid-call →
-   spoken apology → transfer/voicemail. Never false success.
+9. **Safe degradation** — the simulator has fallback branches. Live transfer/voicemail and
+   provider delivery confirmation are not implemented.
 10. **SMS** — STOP/UNSUBSCRIBE → immediate org-scoped suppression in the **sender service**
     (`messaging.ts`), not templates. Missed-call text-back only in permitted hours, once
     per CallSid, capped 1 per caller per 4h. Tests §6, §7.
@@ -151,7 +156,7 @@ docs/adr/                     # 5 architecture decision records
 | `VELORA_ENCRYPTION_KEY` | dev fallback | AES-256-GCM key for integration creds |
 | `VELORA_SESSION_SECRET` | dev fallback | Session signing + webhook HMAC |
 | `VELORA_VERIFY_WEBHOOKS` | `0` | Set `1` to enforce webhook signatures |
-| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` | _(empty)_ | Real Twilio (out of scope) |
+| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` | _(empty)_ | Reserved for future provider integration; unused by current send path |
 
 ---
 
@@ -171,7 +176,8 @@ docs/adr/                     # 5 architecture decision records
 
 ## Safety-constraint test summary
 
-`bun run test` runs 12 tests across 9 SPEC constraints — all pass:
+`bun run test` contains safety tests across the prototype's core rules. Their current
+result has not been verified in this checkout because dependencies are not installed.
 
 1. Concurrent booking race — exactly one winner ✓
 2. Tool-validation failure → repair → fallback ✓
