@@ -1,0 +1,20 @@
+import { defineConfig } from "vitest/config";
+
+// Vitest config for the Velora HVAC safety-constraint suite.
+// - node environment (we exercise domain services + SQLite, no DOM)
+// - single setup file resets + re-seeds the DFW org before all tests
+// - path alias `@/*` mirrors tsconfig.json so imports from src resolve
+export default defineConfig({
+  test: {
+    environment: "node",
+    setupFiles: ["./tests/setup.ts"],
+    include: ["tests/**/*.test.ts"],
+    testTimeout: 30_000,
+    hookTimeout: 60_000,
+  },
+  resolve: {
+    alias: {
+      "@": "/home/z/my-project/src",
+    },
+  },
+});

@@ -1,0 +1,474 @@
+// Velora HVAC Response System — multi-tenant schema
+// Adapted to SQLite (env constraint). See docs/adr/0001-sqlite-adaptation.md
+// HARD CONSTRAINT: every domain table carries organization_id; all queries
+// filter by it from session/job payload, never client input.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Identity & tenancy
+// ---------------------------------------------------------------------------
+
+model Organization {
+  id              String   @id @default(cuid())
+  name            String
+  slug            String   @unique
+  timezone        String   @default("America/Chicago")
+  // E.164 default caller/transfer target (simulated in this build)
+  defaultPhone    String?
+  transferPhone   String?
+  voicemailPhone  String?
+  // Envelope-encrypted blob for integration creds (AES-256-GCM). Never returned.
+  encryptedCreds  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  memberships     Membership[]
+  invitations     Invitation[]
+  contacts        Contact[]
+  leads           Lead[]
+  calls           Call[]
+  appointments    Appointment[]
+  ruleVersions    BusinessRuleVersion[]
+  knowledgeDocs   KnowledgeDocument[]
+  auditLogs       AuditLog[]
+  smsMessages     SmsMessage[]
+  optOuts         SmsOptOut[]
+  outbox          OutboxEvent[]
+  webhookEvents   WebhookEvent[]
+  missedRecoveries MissedCallRecovery[]
+  aiSessions      AiSession[]
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MANAGER
+  DISPATCHER
+  TECHNICIAN
+  VIEWER
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  // scrypt hash (memory-hard KDF; Argon2id spec deviation noted in ADR 0002)
+  passwordHash  String
+  failedLogins  Int      @default(0)
+  lockedUntil   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  memberships   Membership[]
+  invitationsSent Invitation[]
+  sessions      Session[]
+}
+
+model Membership {
+  id              String   @id @default(cuid())
+  organizationId  String
+  userId          String
+  role            String   @default("VIEWER") // Role enum stored as string (SQLite)
+  createdAt       DateTime @default(now())
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([organizationId])
+}
+
+model Invitation {
+  id              String   @id @default(cuid())
+  organizationId  String
+  email           String
+  role            String   @default("VIEWER")
+  token           String   @unique
+  invitedById     String?
+  acceptedAt      DateTime?
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedBy       User?        @relation(fields: [invitedById], references: [id])
+
+  @@index([organizationId])
+}
+
+model Session {
+  id              String   @id @default(cuid())
+  userId          String
+  // opaque token; hash stored, token returned to client cookie
+  tokenHash       String   @unique
+  csrfToken       String
+  ip              String?
+  userAgent       String?
+  idleExpiresAt   DateTime
+  absoluteExpiresAt DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([idleExpiresAt])
+}
+
+// ---------------------------------------------------------------------------
+// Contacts & leads
+// ---------------------------------------------------------------------------
+
+model Contact {
+  id              String   @id @default(cuid())
+  organizationId  String
+  // E.164 normalized; dedup key (org_id + phoneE164)
+  phoneE164       String
+  name            String?
+  email           String?
+  addressStreet   String?
+  addressCity     String?
+  addressState    String?
+  addressZip      String?
+  notes           String?
+  // CRM link id (Jobber/Housecall Pro) — interface only, no-op adapter
+  externalCrmId   String?
+  deletedAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leads           Lead[]
+  calls           Call[]
+  appointments    Appointment[]
+
+  @@unique([organizationId, phoneE164])
+  @@index([organizationId, phoneE164])
+  @@index([organizationId, name])
+}
+
+model Lead {
+  id              String   @id @default(cuid())
+  organizationId  String
+  contactId       String?
+  // snapshot phone for leads without contact (rare; always link when possible)
+  phoneE164       String
+  name            String?
+  serviceType     String?
+  serviceAddressZip String?
+  urgency         String   @default("ROUTINE") // ROUTINE | URGENT | EMERGENCY
+  inServiceArea   Boolean?
+  source          String   @default("CALL") // CALL | WEB | SMS | REFERRAL
+  status          String   @default("NEW") // NEW | CONTACTED | BOOKED | LOST
+  notes           String?
+  deletedAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact         Contact?     @relation(fields: [contactId], references: [id])
+
+  @@index([organizationId, status])
+  @@index([organizationId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Voice / conversations
+// ---------------------------------------------------------------------------
+
+model Call {
+  id              String   @id @default(cuid())
+  organizationId  String
+  contactId       String?
+  // Twilio CallSid (simulated in mock path)
+  callSid         String   @unique
+  direction       String   @default("inbound") // inbound | outbound
+  fromPhone       String
+  toPhone         String
+  status          String   @default("RINGING") // RINGING | IN_PROGRESS | COMPLETED | MISSED | VOICEMAIL | TRANSFERRED | FAILED
+  urgency         String   @default("ROUTINE")
+  serviceType     String?
+  recordingUrl    String?
+  voicemailTranscript String?
+  durationSeconds Int      @default(0)
+  startedAt       DateTime @default(now())
+  endedAt         DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact         Contact?     @relation(fields: [contactId], references: [id])
+  conversation    Conversation?
+  missedRecoveries MissedCallRecovery[]
+
+  @@index([organizationId, startedAt])
+  @@index([organizationId, status])
+}
+
+model Conversation {
+  id              String   @id @default(cuid())
+  organizationId  String
+  callId          String   @unique
+  // state machine per SPEC §20
+  state           String   @default("GREETING")
+  // GREETING | INTAKE | SERVICE_AREA_CHECK | AVAILABILITY | BOOKING |
+  // REQUESTING | ESCALATION | VOICEMAIL | END
+  outcome         String?  // BOOKED | REQUESTED | TRANSFERRED | VOICEMAIL | ENDED | ESCALATED
+  summary         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  call            Call         @relation(fields: [callId], references: [id], onDelete: Cascade)
+  messages        ConversationMessage[]
+  turns           ConversationTurn[]
+}
+
+model ConversationMessage {
+  id              String   @id @default(cuid())
+  conversationId  String
+  role            String   // caller | assistant | system | tool
+  content         String
+  createdAt       DateTime @default(now())
+
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}
+
+// Per-turn AI record: model, prompt version, tokens, latency, tool calls
+model ConversationTurn {
+  id              String   @id @default(cuid())
+  conversationId  String
+  turnIndex       Int
+  provider        String   // mock | openai
+  model           String
+  promptVersion   String
+  inputTokens     Int      @default(0)
+  outputTokens    Int      @default(0)
+  latencyMs       Int      @default(0)
+  toolCalls       String?  // JSON array of {tool, args, result, ok}
+  // cost in micro-dollars (usage/cost tracking per SPEC §10)
+  costMicroUsd    Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, turnIndex])
+}
+
+// ---------------------------------------------------------------------------
+// Scheduling
+// ---------------------------------------------------------------------------
+
+model Appointment {
+  id              String   @id @default(cuid())
+  organizationId  String
+  contactId       String?
+  leadId          String?
+  callId          String?
+  serviceType     String
+  // stored as ISO UTC strings (SQLite has no native tstzrange)
+  startTime       DateTime
+  endTime         DateTime
+  // REQUESTED holds a slot for TTL minutes (holdUntil); CONFIRMED locks it
+  status          String   @default("CONFIRMED") // REQUESTED | CONFIRMED | CANCELLED | COMPLETED | NOSHOW
+  holdUntil       DateTime?
+  notes           String?
+  deletedAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact         Contact?     @relation(fields: [contactId], references: [id])
+
+  @@index([organizationId, startTime])
+  @@index([organizationId, status])
+  @@index([contactId])
+}
+
+// ---------------------------------------------------------------------------
+// Business rules (versioned, immutable on PUBLISH)
+// ---------------------------------------------------------------------------
+
+model BusinessRuleVersion {
+  id              String   @id @default(cuid())
+  organizationId  String
+  ruleType        String   // service_area | business_hours | holidays | after_hours | escalation_routing | missed_call_recovery
+  version         Int
+  status          String   @default("DRAFT") // DRAFT | PUBLISHED | ARCHIVED
+  // JSON blob validated by Zod schema in packages/business-rules
+  dataJson        String
+  effectiveAt     DateTime @default(now())
+  publishedAt     DateTime?
+  publishedById   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, ruleType, version])
+  @@index([organizationId, ruleType, status])
+}
+
+// ---------------------------------------------------------------------------
+// Knowledge base (Postgres FTS in spec; SQLite FTS5 here)
+// ---------------------------------------------------------------------------
+
+model KnowledgeDocument {
+  id              String   @id @default(cuid())
+  organizationId  String
+  title           String
+  content         String
+  tags            String?  // comma-separated
+  status          String   @default("DRAFT") // DRAFT | PUBLISHED | ARCHIVED
+  // PUBLISHED-only retrieval gate enforced in service
+  publishedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
+}
+
+// ---------------------------------------------------------------------------
+// Audit (append-only; no UPDATE/DELETE endpoints)
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id              String   @id @default(cuid())
+  organizationId  String
+  actorType       String   // USER | AI_TOOL | WORKER | SYSTEM
+  // Free-form actor id: user id, tool name, or worker name. No FK so AI_TOOL
+  // and WORKER actors don't violate a user FK.
+  actorId         String?
+  action          String   // e.g. APPOINTMENT_CREATE, CONTACT_UPDATE, RULE_PUBLISH
+  entityType      String
+  entityId        String?
+  beforeJson      String?
+  afterJson       String?
+  reason          String?
+  createdAt       DateTime @default(now())
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, entityType, entityId])
+  @@index([actorType, action])
+}
+
+// ---------------------------------------------------------------------------
+// Messaging (SMS with org-scoped opt-out)
+// ---------------------------------------------------------------------------
+
+model SmsMessage {
+  id              String   @id @default(cuid())
+  organizationId  String
+  toPhone         String
+  fromPhone       String?
+  body            String
+  direction       String   @default("OUTBOUND") // OUTBOUND | INBOUND
+  templateKey     String?
+  status          String   @default("QUEUED") // QUEUED | SENT | DELIVERED | FAILED | STOPPED
+  providerMessageId String?
+  createdAt       DateTime @default(now())
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, toPhone])
+  @@index([organizationId, createdAt])
+}
+
+model SmsOptOut {
+  id              String   @id @default(cuid())
+  organizationId  String
+  phoneE164       String
+  reason          String   @default("STOP")
+  createdAt       DateTime @default(now())
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, phoneE164])
+}
+
+// ---------------------------------------------------------------------------
+// Outbox (at-least-once side effects) + webhook dedup
+// ---------------------------------------------------------------------------
+
+model OutboxEvent {
+  id              String   @id @default(cuid())
+  organizationId  String
+  eventType       String   // SMS_SEND | REMINDER_24H | REMINDER_2H | HOLD_EXPIRE | RECONCILE
+  payloadJson     String
+  status          String   @default("PENDING") // PENDING | PROCESSING | DONE | DEAD
+  attempts        Int      @default(0)
+  lastError       String?
+  idempotencyKey  String?
+  processAfter    DateTime @default(now())
+  processedAt     DateTime?
+  createdAt       DateTime @default(now())
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status, processAfter])
+  @@index([idempotencyKey])
+}
+
+model WebhookEvent {
+  id              String   @id @default(cuid())
+  organizationId  String
+  provider        String   // twilio | sms
+  externalId      String   // CallSid + event composite
+  event           String
+  payloadJson     String
+  signatureValid  Boolean  @default(true)
+  processedAt     DateTime?
+  createdAt       DateTime @default(now())
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, provider, externalId])
+}
+
+model MissedCallRecovery {
+  id              String   @id @default(cuid())
+  organizationId  String
+  callId          String
+  callSid         String
+  phoneE164       String
+  // SPEC: cap 1 per caller per 4h
+  windowKey       String   // phoneE164 + hour bucket
+  textBackSent    Boolean  @default(false)
+  leadCreated     Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  call            Call         @relation(fields: [callId], references: [id])
+
+  @@index([organizationId, phoneE164, createdAt])
+  @@unique([organizationId, windowKey])
+}
+
+// ---------------------------------------------------------------------------
+// AI sessions / prompt registry (for replay & prompt versioning)
+// ---------------------------------------------------------------------------
+
+model AiSession {
+  id              String   @id @default(cuid())
+  organizationId  String
+  // active provider/model/prompt version snapshot
+  provider        String   @default("mock")
+  model           String   @default("velora-mock-1")
+  promptVersion   String   @default("v1")
+  configJson      String?
+  createdAt       DateTime @default(now())
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
