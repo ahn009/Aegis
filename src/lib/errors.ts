@@ -9,6 +9,7 @@ export type ApiErrorCode =
   | "CONFLICT"
   | "RATE_LIMITED"
   | "LOCKED_OUT"
+  | "SERVICE_UNAVAILABLE"
   | "INTERNAL";
 
 export class ApiError extends Error {

@@ -4,13 +4,13 @@ Updated: 2026-09-29 · Plan: [production-build-plan.md](production-build-plan.md
 
 ## Current position
 
-Phase 0 is **in progress**. The launch target is AI agents performing daily operations with a trace of every action. Live voice and SMS remain in the production gate until the launch scope is confirmed. No phase is verified and the application is **not production ready**.
+Phase 0 is **pending at the operator's request**. Resume from the checks below when work continues. The launch target includes live inbound calls, SMS, the dashboard, and AI agents performing daily operations with a trace of every action. OpenAI API is selected. A Twilio + paid Render Ohio + managed Postgres target is proposed in [ADR 0006](adr/0006-production-platform-target.md) while provider/hosting approval is pending. The application is **not production ready**.
 
-Legend: `open` = not started; `in_progress` = work underway; `blocked` = cannot proceed without a named dependency; `verified` = acceptance evidence recorded; `deferred` = explicitly removed from release scope with reason.
+Legend: `open` = not started; `in_progress` = work underway; `pending` = deliberately paused for later continuation; `blocked` = cannot proceed without a named dependency; `verified` = acceptance evidence recorded; `deferred` = explicitly removed from release scope with reason.
 
 | Phase | Status | Exit evidence needed |
 | --- | --- | --- |
-| 0. Baseline and truthful surface | in_progress | Reproducible checks; placeholder inventory and disposition; no production demo access |
+| 0. Baseline and truthful surface | pending | Confirm working platform target; verify clean CI on this commit; finalize historical artifact disposition |
 | 1. Security and tenancy | open | Cross-tenant, role, CSRF/origin and webhook tests pass |
 | 2. Real integrations | open | Recorded provider sandbox call, transfer, SMS, and delivery status |
 | 3. Reliable data and jobs | open | Concurrency/crash tests; migrations; backup/restore drill |
@@ -27,7 +27,7 @@ Legend: `open` = not started; `in_progress` = work underway; `blocked` = cannot 
 | P0-03 | 1 | open | Authenticate all callbacks; map verified destination to tenant | Forged callback and wrong-tenant integration tests |
 | P0-04 | 1 | open | Validate production secrets and provider config at startup | Failing startup tests for missing/weak values |
 | P0-05 | 0 | verified | Preserve CI gate as changes continue | [GitHub Actions run 36597887050](https://github.com/ahn009/Aegis/actions/runs/36597887050): clean install, Prisma generation, typecheck, lint, 13 tests, build pass |
-| P0-06 | 0 | in_progress | Review historical `.env`/database exposure and rotate any real credentials/sessions; bootstrap and demo-seed guard verified | No fixed credentials or fixture data in release artifact |
+| P0-06 | 0 | pending | Complete historical artifact decision and enforce fresh deployment database; local session invalidated | No fixed credentials or fixture data in release artifact |
 | P0-07 | 1 | open | Persist selected organization in session | Multi-org login/switch/role tests |
 | P1-01 | 3 | open | Add atomic outbox claim and idempotent send | Two-worker race + crash/retry tests |
 | P1-02 | 2 | open | Fix provider schema/history and timeout policy | Provider contract and failure tests |
@@ -35,33 +35,33 @@ Legend: `open` = not started; `in_progress` = work underway; `blocked` = cannot 
 | P1-04 | 3 | open | Make appointment transitions and reminders durable | Confirmation race and crash tests |
 | P1-05 | 1 | open | Define mutation role matrix; enforce CSRF/origin | Viewer/technician denial and cross-site tests |
 | P1-06 | 1 | open | Add trusted-IP and unknown-account abuse controls | Rate-limit tests across accounts/instances |
-| P1-07 | 6 | in_progress | Replace ignored preview scripts and retire or rewrite shell tests that reference them | Environment-neutral staging deploy |
+| P1-07 | 6 | pending | Preview Caddy config, websocket examples, and shell tests removed; create environment-neutral staging deploy | Staging deployment and smoke test |
 | P1-08 | 3 | open | Choose DB and write migrations/restore plan | Migration and restore evidence |
 | P1-09 | 4 | open | Define agent roles, tasks and approval policy | Approved design + task schema and policy tests |
-| P2-01 | 0 | in_progress | Review remaining route and UI claims; global preview notice and simulator/analytics copy now disclose simulated outcomes | Route/UX check |
+| P2-01 | 0 | verified | Preserve truthful preview labels and production guards until real integrations replace them | Production browser: simulator hidden, authenticated route 404, webhooks 503, no page errors/overflow |
 | P2-02 | 3 | open | Remove fixed timezone and stale holidays | Org timezone/DST tests |
 | P2-03 | 6 | open | Decide robots/security headers/cache policy | Header and crawler checks |
 | P2-04 | 0 | verified | Node 24/npm runtime and lockfile install verified; obsolete Bun lockfile removed | Temporary-directory `npm ci --allow-remote=all` passed; local checks passed |
-| P0-08 | 0 | in_progress | Resolve remaining Prisma/config/deepmerge-ts advisory chain; six findings cleared by removing unused direct packages | Clean production dependency audit or documented risk decisions |
+| P0-08 | 0 | pending | Verify scoped `deepmerge-ts` override in clean CI; local audit has zero findings | Clean production dependency audit and Prisma checks in CI |
 
 ## Phase 0 checklist
 
 - [x] Inventory product code, schema, routes, deployment artifacts, tests, and placeholder markers.
 - [x] Record initial production gaps with source evidence in the plan.
-- [ ] Complete per-file line review register, including used UI controls and all route permissions.
-- [ ] Confirm launch scope, hosting, phone provider, AI provider, database, and deployment region.
+- [x] Record first-pass source review, used UI controls, placeholder dispositions, and all route permissions in [phase-0-source-review.md](phase-0-source-review.md). Later phase gates own deeper security and interaction verification.
+- [ ] Confirm provider and hosting working target. Live voice/SMS plus dashboard/agents and OpenAI API are confirmed; [ADR 0006](adr/0006-production-platform-target.md) proposes Twilio, paid Render Ohio, and managed Postgres.
 - [x] Capture CI logs on the pushed branch. A **clean** lockfile install, typecheck, lint, tests, and webpack build pass in [run 36597887050](https://github.com/ahn009/Aegis/actions/runs/36597887050).
-- [ ] Remove or isolate every production-facing demo/fake behavior and reconcile README claims. The demo login shortcut is now excluded from production builds.
-- [ ] Review historical `.env` and `db/custom.db` exposure, invalidate the stored session, and rotate any real values. Both files are now untracked and ignored locally; Git history is unchanged.
+- [x] Verify production browser surface after disabling simulator routes and fake live integrations; README claims are reconciled. Local desktop/mobile browser checks passed; clean CI on this commit remains pending.
+- [ ] Finalize historical artifact disposition. Historical `.env` has only a database URL; the database has demo-domain users and `555` phone values. One unexpired local session was invalidated after a local backup. Git history is unchanged and must not be used as production data.
 
 ## Decisions needed
 
 | Decision | Current assumption | Impact |
 | --- | --- | --- |
-| Launch channel | Live voice and SMS | Determines Phase 2 gate and provider work |
-| Hosting/region | Undecided | Database, worker, secrets and deployment design |
-| Phone/SMS provider | Undecided | Callback protocol, tenant mapping and delivery receipts |
-| AI provider/model | Undecided | Provider contract, cost and latency targets |
+| Launch channel | Live voice, SMS, dashboard, and AI operations confirmed | Determines Phase 2 and 4 gates |
+| Hosting/region | Paid Render, Ohio proposed; acceptance pending | Database, worker, secrets and deployment design |
+| Phone/SMS provider | Twilio proposed; acceptance pending | Callback protocol, tenant mapping and delivery receipts |
+| AI provider/model | OpenAI API selected; model and spend policy pending | Provider contract, cost and latency targets |
 | Agent autonomy | Start with approvals for customer-visible or destructive actions | Policy and review queue design |
 | CRM integration | Undecided; no-op field exists today | Onboarding and data synchronization scope |
 
@@ -90,6 +90,19 @@ Legend: `open` = not started; `in_progress` = work underway; `blocked` = cannot 
 | 2026-09-29 | P0-05 GitHub CI run [36597229342](https://github.com/ahn009/Aegis/actions/runs/36597229342) | Clean `npm ci` and Prisma generation passed; `npm run typecheck` failed because `@types/node` was only available through local transitive dependencies. Lint, tests, and build were skipped. Added `@types/node` as a direct development dependency; a replacement CI run is required. |
 | 2026-09-29 | P0-05 replacement [GitHub CI run 36597887050](https://github.com/ahn009/Aegis/actions/runs/36597887050) | Passed: `npm ci --allow-remote=all`, Prisma generation, typecheck, lint, 13 isolated tests, and webpack production build. P0-05 verified. |
 | 2026-09-29 | P0-06 historical `.env` shape review | Historical `.env` versions contained only a `DATABASE_URL` key; no provider/app secret keys were present in that file. Values were not printed. The historical database still contains user/session material and remains a release blocker until assessed and invalidated as needed. |
+| 2026-09-29 | P0-06 historical database read-only shape review | Two tracked SQLite revisions found. Latest had 3 organizations, 3 users with demo email domains, 1 session, 10 contacts, 5 calls, 7 SMS records; all checked phone fields contained `555`. The local session had future idle/absolute expiry dates. Backed up local `db/custom.db` to `/tmp/velora-session-backup-haupjf3n.db`, deleted its one session, and verified zero remain. No original values were printed. Historical Git blobs remain; deploy from a fresh database only. |
+| 2026-09-29 | P0-08 Prisma advisory fix | Scoped `@prisma/config` override resolves `deepmerge-ts@8.0.2`; `npm audit --omit=dev --json` reports zero findings. Prisma client generation, isolated tests, and local production build pass. Clean CI still pending. Upstream [Prisma issue](https://github.com/prisma/orm/issues/30052) should be monitored so the override can be removed when native support lands. |
+| 2026-09-29 | P2-01 fail-closed prototype paths | Production simulator helper returns 404; direct production-mode check passed. Production voice/SMS/status webhook handlers return 503 before processing; direct route checks passed for all three. Fake SMS sender, transfer tool, and staff notice refuse success in production. The simulator navigation is hidden in production. Browser check and clean CI still pending. |
+| 2026-09-29 | P1-07 preview artifact cleanup | Removed `Caddyfile` with query-directed localhost proxy, preview websocket examples, and three shell tests tied to ignored `.zscripts/`. Staging deployment remains a Phase 6 task. |
+| 2026-09-29 | P2-01 production browser check | Built standalone app against isolated `/tmp/velora-browser-*/test.db`. Desktop and mobile sign-in showed the preview notice, no simulator navigation, no page errors or horizontal overflow. Voice/SMS/call-status POST returned 503. With the secure session cookie supplied explicitly over local HTTP, `/api/auth/me` returned 200 and `/api/simulate-call/start` returned 404. Browser test server stopped. |
+| 2026-09-29 | Pause checkpoint | Operator requested current progress be committed and pushed, with Phase 0 pending for later. Local `npm run typecheck`, lint, 13 tests, build, Prisma generation, and `npm audit --omit=dev --json` passed after the scoped override. A fresh GitHub CI run on this commit is the next verification step. |
+
+## Resume checklist
+
+1. Confirm or revise the Twilio + paid Render Ohio + Postgres working target in ADR 0006.
+2. Check the GitHub CI run for this checkpoint, including Prisma generation, tests, audit follow-up, and build.
+3. Finalize the historical demo database policy: deploy from a fresh database, never restore the tracked fixture; decide whether Git history needs cleanup.
+4. Close Phase 0 only after its remaining exit evidence is recorded, then commit and push the phase closure before starting Phase 1.
 
 ## Update template
 

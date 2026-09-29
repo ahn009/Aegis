@@ -78,6 +78,9 @@ export async function sendSms(
   if (!phone || !isValidE164(phone)) {
     throw new ApiError(422, "Invalid phone", "VALIDATION");
   }
+  if (process.env.NODE_ENV === "production") {
+    throw new ApiError(503, "SMS provider is not configured", "SERVICE_UNAVAILABLE");
+  }
   // SENDER-LEVEL GATE — enforced here, not in templates.
   if (await isSuppressed(organizationId, phone)) {
     const msg = await db.smsMessage.create({
@@ -95,6 +98,9 @@ export async function sendSms(
 }
 
 async function sendSmsInternal(organizationId: string, phone: string, body: string, templateKey?: string) {
+  if (process.env.NODE_ENV === "production") {
+    throw new ApiError(503, "SMS provider is not configured", "SERVICE_UNAVAILABLE");
+  }
   // Real Twilio call would go here. In this build (no Twilio creds), we record
   // the message as SENT. The outbox + worker pattern would retry on failure.
   const msg = await db.smsMessage.create({

@@ -17,6 +17,9 @@ const SmsSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  if (process.env.NODE_ENV === "production") {
+    return new Response("Messaging integration unavailable", { status: 503 });
+  }
   try {
     const rawBody = await req.text();
     // Signature verification (SPEC)

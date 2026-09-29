@@ -77,7 +77,7 @@ already exists. The development seed must not be used for deployment.
 | Component        | Status                                                                 |
 |------------------|------------------------------------------------------------------------|
 | AI provider      | **Mock** by default (deterministic, zero keys). OpenAI-compatible provider included; enable with `VELORA_AI_PROVIDER=openai` + `OPENAI_API_KEY`. |
-| Twilio voice/SMS | **Simulated** via API webhooks. Signature verification implemented (`src/lib/webhook-security.ts`), gated behind `VELORA_VERIFY_WEBHOOKS=1`. |
+| Twilio voice/SMS | **Simulated in development.** Production webhook routes return 503 until the real provider integration and tenant/signature checks are complete. |
 | STT/TTS          | N/A — the simulator is text-in/text-out. Real STT/TTS would slot into the voice-gateway routes. |
 | Database         | **Real** SQLite via Prisma. All tenancy, audit, booking, opt-out logic is live. |
 | Worker/Queues    | Outbox table + polling worker. Atomic claims and provider-level idempotency are still needed for production. |
@@ -116,42 +116,38 @@ scripts/
   seed.ts                     # DFW HVAC org + owner + rules + sample contacts
   simulate-call.ts            # end-to-end conversation driver (no external accounts)
   worker.ts                   # standalone outbox worker
-tests/safety.test.ts          # prototype safety tests (run before relying on results)
-docs/adr/                     # 5 architecture decision records
+tests/safety.test.ts          # prototype safety tests
+docs/adr/                     # architecture decision records
 ```
 
 ---
 
 ## Current safeguards — production review still required
 
-1. **Tenancy** — every domain query filters by `organization_id` from the session, never
-   client input. `orgScope()` + `assertTenant()` enforce it. Test §3 proves cross-tenant
-   isolation.
+1. **Tenancy** — authenticated routes use the session organization for their data queries.
+   Live webhook tenant resolution and selected-organization sessions still need Phase 1 work.
 2. **Tool calls** — Zod-validated args; org context injected server-side; invalid args →
    ONE repair round → safe fallback + escalation. Every attempt is audited. Test §2.
-3. **AI prohibitions** — the AI may never invent pricing/availability, diagnose, invent
-   transfer numbers, alter urgency, touch contact org/id/CRM links, or accept out-of-list
-   services. Enforced in `tool-executor.ts` dispatch (service-area re-derivation, service
-   gate, transfer-phone-from-rules). Tests §5, §8.
-4. **Emergency** — safety keywords in caller speech → deterministic EMERGENCY
-   classification (in the orchestrator, BEFORE the provider runs) → immediate transfer.
-   Unreachable → voicemail + staff notification + persisted follow-up. Test §5.
+3. **AI tool boundary** — the tool executor validates arguments and re-derives service area
+   and transfer targets. Provider output and live action policy still need Phase 2/4 evaluation.
+4. **Emergency simulation** — keywords trigger deterministic escalation before the provider
+   runs. Live transfer, voicemail, and staff notification are not implemented yet.
 5. **Booking** — transactional overlap re-check inside a write transaction; SQLite
-   serializes writers so the re-check is atomic. Exactly-one-winner proven by Test §1.
+   serializes writers so the re-check is atomic in the current SQLite test. The production
+   database race must be tested after the PostgreSQL migration.
 6. **Webhooks** — optional shared-secret verification in voice/SMS and dedup on
    `(provider, externalId)`. The status callback is unverified and tenant resolution is unsafe
    for live use; see P0-03 in the production plan.
 7. **Conversation state machine** — `assertTransition()` blocks illegal transitions in
    code, never by prompt alone. ESCALATION reachable from every state.
-8. **Audit** — append-only `AuditLog`; no UPDATE/DELETE endpoints exist. Every mutation
-   (USER / AI_TOOL / WORKER) writes one row. PII redacted.
+8. **Audit** — actions write `AuditLog` rows and there are no UPDATE/DELETE endpoints for
+   the log. Complete mutation coverage and redaction need a Phase 4 review.
 9. **Safe degradation** — the simulator has fallback branches. Live transfer/voicemail and
    provider delivery confirmation are not implemented.
-10. **SMS** — STOP/UNSUBSCRIBE → immediate org-scoped suppression in the **sender service**
-    (`messaging.ts`), not templates. Missed-call text-back only in permitted hours, once
-    per CallSid, capped 1 per caller per 4h. Tests §6, §7.
-11. **Secrets** — AES-256-GCM envelope encryption for integration creds
-    (`crypto.ts`); never returned by API. PII redacted from audit/logs.
+10. **SMS simulation** — STOP/UNSUBSCRIBE suppresses simulated sends in the sender service.
+    Production sends fail closed until a provider and delivery receipts are implemented.
+11. **Secrets** — AES-256-GCM encrypts stored integration credentials. Production secret
+    validation and full audit/log redaction are still open.
 12. **Availability** — slots = business hours − holidays − active appointments − buffers,
     computed in org timezone, DST-aware (`evaluators.ts`).
 

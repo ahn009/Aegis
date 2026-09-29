@@ -27,7 +27,7 @@ const NAV: { id: ViewId; label: string; icon: React.ComponentType<{ className?: 
   { id: "contacts", label: "Contacts", icon: Users, group: "Operations" },
   { id: "leads", label: "Leads", icon: UserPlus, group: "Operations" },
   { id: "appointments", label: "Appointments", icon: CalendarClock, group: "Scheduling" },
-  { id: "simulate", label: "Simulate Call", icon: PhoneCall, group: "AI Engine" },
+  ...(process.env.NODE_ENV !== "production" ? [{ id: "simulate" as const, label: "Simulate Call", icon: PhoneCall, group: "AI Engine" }] : []),
   { id: "analytics", label: "Analytics", icon: BarChart3, group: "AI Engine" },
   { id: "rules", label: "Business Rules", icon: BookOpen, group: "AI Engine" },
   { id: "audit", label: "Audit Log", icon: ScrollText, group: "Compliance" },

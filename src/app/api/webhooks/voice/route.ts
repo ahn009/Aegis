@@ -13,6 +13,9 @@ import { ok, errorBody, ApiError } from "@/lib/errors";
 // SPEC: verify signatures; dedup on (provider, CallSid + event); ack <500ms.
 
 export async function POST(req: NextRequest) {
+  if (process.env.NODE_ENV === "production") {
+    return new Response("Voice integration unavailable", { status: 503 });
+  }
   try {
     const rawBody = await req.text();
     // Signature verification (SPEC). Body is form-encoded OR json.

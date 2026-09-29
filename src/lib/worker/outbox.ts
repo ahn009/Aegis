@@ -101,6 +101,9 @@ async function dispatch(eventType: string, payloadJson: string, organizationId: 
       return;
     }
     case "STAFF_NOTIFY": {
+      if (process.env.NODE_ENV === "production") {
+        throw new Error("Staff notification provider is not configured");
+      }
       await auditAsWorker(organizationId, "outbox-worker", {
         action: "STAFF_NOTIFY",
         entityType: "Notification",

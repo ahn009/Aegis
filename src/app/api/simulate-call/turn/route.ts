@@ -6,6 +6,7 @@ import { withApi, parseBody } from "@/lib/http";
 import { db } from "@/lib/db";
 import { createMockProvider as createMock } from "@/lib/ai/provider-mock";
 import { createOpenAIProvider, isProviderConfigured } from "@/lib/ai/provider-openai";
+import { requireSimulatorAccess } from "@/lib/simulator-access";
 
 const TurnSchema = z.object({
   conversationId: z.string(),
@@ -16,6 +17,7 @@ const TurnSchema = z.object({
 // provider (MockProvider by default; OpenAI if VELORA_AI_PROVIDER=openai and
 // OPENAI_API_KEY set). Falls back to Mock on OpenAI failure (safe degradation).
 export const POST = withApi(async ({ user, req }) => {
+  requireSimulatorAccess();
   const { conversationId, callerUtterance } = await parseBody(req, TurnSchema);
   const conv = await db.conversation.findFirst({
     where: { id: conversationId, organizationId: user.organizationId },

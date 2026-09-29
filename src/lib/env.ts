@@ -1,4 +1,4 @@
-// Centralized env config. Never access process.env directly elsewhere.
+// Prototype environment defaults. Phase 1 must validate production settings at startup.
 
 function required(name: string, fallback?: string): string {
   const v = process.env[name] ?? fallback;

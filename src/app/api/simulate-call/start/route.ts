@@ -5,6 +5,7 @@ import { randomToken } from "@/lib/crypto";
 import { normalizePhone } from "@/lib/phone";
 import { ApiError, ok } from "@/lib/errors";
 import { withApi, parseBody } from "@/lib/http";
+import { requireSimulatorAccess } from "@/lib/simulator-access";
 
 const StartSchema = z.object({
   fromPhone: z.string(),
@@ -14,6 +15,7 @@ const StartSchema = z.object({
 
 // POST /api/simulate-call/start — creates a simulated inbound call + conversation.
 export const POST = withApi(async ({ user, req }) => {
+  requireSimulatorAccess();
   const { fromPhone, scenario } = await parseBody(req, StartSchema);
   const phone = normalizePhone(fromPhone);
   if (!phone) throw ApiError.badRequest("Invalid fromPhone");

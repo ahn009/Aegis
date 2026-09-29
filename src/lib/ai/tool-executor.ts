@@ -222,6 +222,9 @@ async function dispatch(name: string, args: any, ctx: ExecContext): Promise<Tool
       };
     }
     case "transfer_to_human": {
+      if (process.env.NODE_ENV === "production") {
+        return { ok: false, error: "transfer_unavailable: voice provider is not configured", sideEffects: [] };
+      }
       // Target phone NEVER from AI — resolved from rules.
       const escalation = ctx.rules.rules.escalation_routing;
       const afterHours = ctx.rules.rules.after_hours;

@@ -5,6 +5,9 @@ import { ok, errorBody } from "@/lib/errors";
 
 // Call status callback (simulated Twilio). Dedup on (twilio, CallSid+Status).
 export async function POST(req: NextRequest) {
+  if (process.env.NODE_ENV === "production") {
+    return new Response("Voice integration unavailable", { status: 503 });
+  }
   try {
     const form = await req.formData();
     const obj: Record<string, string> = {};
