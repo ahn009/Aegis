@@ -1,5 +1,5 @@
 // scripts/worker.ts — standalone outbox worker (polling loop).
-// Run: bun run worker
+// Run: npm run worker
 import { processOutbox } from "../src/lib/worker/outbox";
 import { db } from "../src/lib/db";
 

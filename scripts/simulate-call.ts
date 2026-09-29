@@ -3,9 +3,9 @@
 // using a fake Twilio webhook payload — greeting → intake → area validation →
 // booking — with NO Twilio/OpenAI account required.
 //
-// Run:  bun run simulate-call
-//       bun run simulate-call --emergency    # exercises the emergency path
-//       bun run simulate-call --out-of-area  # exercises the out-of-area path
+// Run:  npm run simulate-call
+//       npm run simulate-call -- --emergency    # exercises the emergency path
+//       npm run simulate-call -- --out-of-area  # exercises the out-of-area path
 import { db } from "../src/lib/db";
 import { runTurn } from "../src/lib/ai/orchestrator";
 import { createMockProvider } from "../src/lib/ai/provider-mock";
@@ -19,7 +19,7 @@ const OUT_OF_AREA = args.has("--out-of-area");
 async function main() {
   const org = await db.organization.findUnique({ where: { slug: "dfw-velora-hvac" } });
   if (!org) {
-    console.error("Org not found. Run `bun run seed` first.");
+    console.error("Org not found. Run `npm run seed` first.");
     process.exit(1);
   }
 

@@ -4,7 +4,7 @@
 // after-hours + escalation rules, an OWNER user (credentials printed by seed),
 // sample contacts.
 //
-// Run: bun run seed  (or)  bun src/scripts/seed.ts
+// Run: npm run seed
 import { db } from "../src/lib/db";
 import { hashPassword } from "../src/lib/password";
 import { encrypt } from "../src/lib/crypto";

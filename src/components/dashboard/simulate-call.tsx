@@ -97,7 +97,7 @@ export function SimulateCall() {
               <div className="h-12 w-12 rounded-xl bg-emerald-500 flex items-center justify-center shrink-0"><PhoneCall className="h-6 w-6 text-zinc-900" /></div>
               <div>
                 <h2 className="text-lg font-semibold">Simulate an inbound call</h2>
-                <p className="text-sm text-muted-foreground mt-1">Drive a full conversation through the AI orchestrator using the deterministic MockProvider — no Twilio or OpenAI account required. Every booking, transfer, and SMS is executed against the real domain services with all safety constraints enforced.</p>
+                <p className="text-sm text-muted-foreground mt-1">Try a text conversation without placing a phone call. This preview writes call, booking, and message records to this workspace. Transfers and SMS are simulated; no customer is contacted.</p>
               </div>
             </div>
           </CardContent>
@@ -143,11 +143,11 @@ export function SimulateCall() {
               <div>
                 <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">How it works</div>
                 <ol className="space-y-2.5 text-xs text-muted-foreground">
-                  <li className="flex gap-2"><span className="h-4 w-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">1</span><span><span className="text-foreground font-medium">Inbound call</span> arrives via the voice webhook → a Call + Conversation are created (CallSid deduped).</span></li>
-                  <li className="flex gap-2"><span className="h-4 w-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">2</span><span><span className="text-foreground font-medium">Orchestrator</span> runs the deterministic emergency pre-check BEFORE the provider. If safety keywords match → immediate transfer.</span></li>
-                  <li className="flex gap-2"><span className="h-4 w-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">3</span><span><span className="text-foreground font-medium">MockProvider</span> emits assistant text + Zod-validated tool calls. The <span className="text-foreground font-medium">executor</span> re-derives service area, never trusts AI.</span></li>
-                  <li className="flex gap-2"><span className="h-4 w-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">4</span><span><span className="text-foreground font-medium">Domain services</span> book (transactional re-check) or request (120-min hold) or transfer (phone from rules, never AI).</span></li>
-                  <li className="flex gap-2"><span className="h-4 w-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">5</span><span>Every turn is <span className="text-foreground font-medium">persisted</span> (model, prompt_version, tokens, latency, cost) + audited.</span></li>
+                  <li className="flex gap-2"><span className="h-4 w-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">1</span><span>A simulated call record is created for the chosen scenario.</span></li>
+                  <li className="flex gap-2"><span className="h-4 w-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">2</span><span>The assistant checks for emergency language and follows the configured business rules.</span></li>
+                  <li className="flex gap-2"><span className="h-4 w-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">3</span><span>The conversation can create real workspace records, including an appointment request.</span></li>
+                  <li className="flex gap-2"><span className="h-4 w-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">4</span><span>Transfer and message outcomes are simulated. No external delivery is confirmed.</span></li>
+                  <li className="flex gap-2"><span className="h-4 w-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">5</span><span>The preview activity is saved in the workspace and can appear in dashboard reports.</span></li>
                 </ol>
               </div>
               <div className="border-t pt-3">

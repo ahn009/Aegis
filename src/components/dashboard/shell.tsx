@@ -115,6 +115,10 @@ export function Shell({ user, org, onLogout }: { user: AuthUser; org: OrgInfo | 
             <WorkerStatus canTrigger={["OWNER", "ADMIN"].includes(user.role)} />
           </header>
 
+          <div role="status" className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900 sm:px-6">
+            Preview workspace: calls, messages, and transfers are simulated. Dashboard totals can include preview activity.
+          </div>
+
           <main className="flex-1 p-4 sm:p-6">
             {view === "overview" && <Overview />}
             {view === "calls" && <Calls />}

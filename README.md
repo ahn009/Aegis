@@ -18,20 +18,22 @@ tracked in [the production build plan](docs/production-build-plan.md) and
 
 ## Quickstart
 
+Use Node.js 24 and npm. The lockfile records the exact dependency versions.
+
 ```bash
 # 1. Install dependencies
-bun install
+npm ci --allow-remote=all
 
 # 2. Create a local environment file and set DATABASE_URL for this checkout
 cp .env.example .env
 
 # 3. Push the schema + run the development seed (creates sample data)
-bun run db:push
-bun run seed
+npm run db:push
+npm run seed
 # → prints OWNER credentials: owner@velorahvac.example / VeloraDemo2025!
 
 # 4. Start the dev server (Next.js, port 3000)
-bun run dev
+npm run dev
 
 # 5. Open the dashboard at / and sign in with the seeded credentials.
 ```
@@ -39,23 +41,34 @@ bun run dev
 ### Drive a full conversation with no Twilio/OpenAI
 
 ```bash
-bun run simulate-call             # normal booking: greeting → intake → area → booking
-bun run simulate-call --emergency # gas smell → immediate transfer
-bun run simulate-call --out-of-area # Beverly Hills → request (never books)
+npm run simulate-call               # normal booking: greeting → intake → area → booking
+npm run simulate-call -- --emergency # gas smell → immediate transfer
+npm run simulate-call -- --out-of-area # Beverly Hills → request (never books)
 ```
 
 ### Run the worker (outbox: hold expiry, reminders, reconciliation)
 
 ```bash
-bun run worker                    # standalone polling loop
+npm run worker                    # standalone polling loop
 # or trigger from the dashboard / POST /api/worker/run (ADMIN+)
 ```
 
 ### Run the safety test suite
 
 ```bash
-bun run test                      # run the current safety tests locally
+npm test                          # run the current safety tests locally
 ```
+
+### Initialize an empty deployment database
+
+Use `npm run bootstrap` once after creating the schema on an empty database. Supply
+`VELORA_BOOTSTRAP_ORG_NAME`, `VELORA_BOOTSTRAP_ORG_SLUG`,
+`VELORA_BOOTSTRAP_TIMEZONE`, `VELORA_BOOTSTRAP_OWNER_NAME`,
+`VELORA_BOOTSTRAP_OWNER_EMAIL`, and `VELORA_BOOTSTRAP_OWNER_PASSWORD` through
+your secret manager. The password must have at least 16 characters. The command
+creates only the organization and owner; configure business rules and provider
+credentials before live traffic. It refuses to run if any organization or user
+already exists. The development seed must not be used for deployment.
 
 ---
 
@@ -176,8 +189,8 @@ docs/adr/                     # 5 architecture decision records
 
 ## Safety-constraint test summary
 
-`bun run test` contains safety tests across the prototype's core rules. Their current
-result has not been verified in this checkout because dependencies are not installed.
+`npm test` runs safety tests against a fresh temporary SQLite database. In the current
+checkout, 13 tests pass.
 
 1. Concurrent booking race — exactly one winner ✓
 2. Tool-validation failure → repair → fallback ✓

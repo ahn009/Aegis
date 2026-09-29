@@ -8,7 +8,7 @@ import { auditAsWorker } from "../audit";
 // with backoff, outbox pattern, reconciliation jobs. At-least-once delivery;
 // consumers must be idempotent (idempotencyKey dedupes).
 //
-// In this build the worker runs either via `bun run worker` (scripts/worker.ts,
+// In this build the worker runs either via `npm run worker` (scripts/worker.ts,
 // a polling loop) or via POST /api/worker/run (dashboard trigger). Both call
 // processOutbox() below.
 // ============================================================================

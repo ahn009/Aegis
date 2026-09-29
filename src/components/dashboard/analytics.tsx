@@ -167,7 +167,7 @@ export function Analytics() {
           <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Cpu className="h-3.5 w-3.5 text-muted-foreground" /> AI cost (14d)</CardTitle></CardHeader>
           <CardContent>
             <div className="text-3xl font-semibold tabular-nums">{costDisplay}</div>
-            <div className="text-xs text-muted-foreground mt-1">{data.totals.aiTurns14d} turns · MockProvider is free</div>
+            <div className="text-xs text-muted-foreground mt-1">{data.totals.aiTurns14d} recorded turns · Includes preview activity</div>
             <div className="mt-3 pt-3 border-t space-y-1.5 text-xs">
               <div className="flex items-center justify-between"><span className="text-muted-foreground">Avg tokens / turn</span><span className="tabular-nums font-mono">{data.totals.aiTurns14d ? Math.round(data.aiByDay.reduce((s: number, d: any) => s + d.inputTokens + d.outputTokens, 0) / Math.max(1, data.totals.aiTurns14d)) : 0}</span></div>
               <div className="flex items-center justify-between"><span className="text-muted-foreground">Avg latency</span><span className="tabular-nums font-mono">{data.totals.aiTurns14d ? Math.round(data.aiByDay.reduce((s: number, d: any) => s + d.avgLatencyMs, 0) / Math.max(1, data.totals.aiTurns14d)) : 0}ms</span></div>

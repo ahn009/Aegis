@@ -12,7 +12,7 @@ Ship an AI-operated daily operations system that reports only real outcomes, pro
 
 This is a source audit, not a certification. I reviewed the application routes, auth/session boundary, webhook paths, AI provider/orchestrator/tool executor, domain services, worker, schema, seed, deployment scripts, UI placeholder scan, and existing tests. The repository has about 9,800 lines across these first-party paths. Generated `src/components/ui/*` controls are inventoried as vendor-style UI code; any component used by a product screen must still pass interaction and accessibility checks. A file-by-file review register is below so the remaining line review is explicit rather than implied.
 
-Dependencies are now present in this checkout, but a clean lockfile install is still unverified and `bun` is unavailable here. On 2026-09-29, the isolated test runner passed 13 tests; TypeScript and lint passed; a webpack production build completed outside the sandbox. The default Turbopack build hit a sandbox process restriction, so the build script now selects webpack. These results are a baseline, not a production release gate.
+Node 24/npm is the selected runtime, and a clean temporary-directory lockfile install passes. The CI workflow has been added, but its remote run is pending. On 2026-09-29, the isolated test runner passed 13 tests; TypeScript and lint passed; a webpack production build completed. The default Turbopack build hit a sandbox process restriction, so the build script now selects webpack. Removing unused dependencies reduced the production audit from nine advisories to three in the Prisma/config/deepmerge-ts chain. These results are a baseline, not a production release gate.
 
 ### Verified production gaps
 
@@ -37,6 +37,7 @@ Dependencies are now present in this checkout, but a clean lockfile install is s
 | P2-02 | Medium | Availability/reminders include fixed `America/Chicago` formatting in the worker; seed holiday dates are static. | Use organization timezone and live business rules, with DST and annual-rule tests. |
 | P2-03 | Medium | `public/robots.txt` allows all crawlers on an authenticated operations app. | Decide indexing policy, set security headers and cache controls, and test private pages/API responses. |
 | P2-04 | Medium | `package.json` includes broad template dependencies with no observed product imports; build/start scripts depend on Bun while this environment lacks Bun. | Trim unused packages after import analysis and pin a supported runtime with deterministic installs. |
+| P0-08 | High | `npm audit --omit=dev --json` reports nine production advisories (five high, four moderate), including image processing and transitive parser packages. | Remove unused packages, update needed ones safely, and record a clean audit or reviewed residual risk before release. |
 | P1-09 | High | Current AI flow handles one simulated call turn; there is no agent job registry, durable task execution, approval policy, or operator review queue for day-to-day work. | Define bounded agent roles, task/event model, action permissions, approval thresholds, replayable records, and a human override. |
 
 ### Placeholder policy

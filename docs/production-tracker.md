@@ -26,8 +26,8 @@ Legend: `open` = not started; `in_progress` = work underway; `blocked` = cannot 
 | P0-02 | 2 | open | Replace fake SMS `SENT` and audit-only staff notice | Provider message IDs, delivery/failure callbacks |
 | P0-03 | 1 | open | Authenticate all callbacks; map verified destination to tenant | Forged callback and wrong-tenant integration tests |
 | P0-04 | 1 | open | Validate production secrets and provider config at startup | Failing startup tests for missing/weak values |
-| P0-05 | 0 | in_progress | Add CI and clean-install gate; local typecheck, lint, isolated tests, and webpack build pass | `typecheck`, lint, tests, build logs in CI |
-| P0-06 | 0 | in_progress | Build production bootstrap; review Git history and rotate any real credentials/sessions. Demo seed now refuses `NODE_ENV=production`. | No fixed credentials or fixture data in release artifact |
+| P0-05 | 0 | in_progress | Verify CI on GitHub; local clean install, typecheck, lint, isolated tests, and webpack build pass | Passing CI run on pushed branch |
+| P0-06 | 0 | in_progress | Review historical `.env`/database exposure and rotate any real credentials/sessions; bootstrap and demo-seed guard verified | No fixed credentials or fixture data in release artifact |
 | P0-07 | 1 | open | Persist selected organization in session | Multi-org login/switch/role tests |
 | P1-01 | 3 | open | Add atomic outbox claim and idempotent send | Two-worker race + crash/retry tests |
 | P1-02 | 2 | open | Fix provider schema/history and timeout policy | Provider contract and failure tests |
@@ -38,10 +38,11 @@ Legend: `open` = not started; `in_progress` = work underway; `blocked` = cannot 
 | P1-07 | 6 | in_progress | Replace ignored preview scripts and retire or rewrite shell tests that reference them | Environment-neutral staging deploy |
 | P1-08 | 3 | open | Choose DB and write migrations/restore plan | Migration and restore evidence |
 | P1-09 | 4 | open | Define agent roles, tasks and approval policy | Approved design + task schema and policy tests |
-| P2-01 | 0 | in_progress | Reconcile remaining mock UI claims; hello-world endpoint removed | Route/UX check |
+| P2-01 | 0 | in_progress | Review remaining route and UI claims; global preview notice and simulator/analytics copy now disclose simulated outcomes | Route/UX check |
 | P2-02 | 3 | open | Remove fixed timezone and stale holidays | Org timezone/DST tests |
 | P2-03 | 6 | open | Decide robots/security headers/cache policy | Header and crawler checks |
-| P2-04 | 0 | in_progress | Pin one runtime/install path; build/start now use Node, but seed/worker scripts still require Bun | Lockfile-based clean install |
+| P2-04 | 0 | verified | Node 24/npm runtime and lockfile install verified; obsolete Bun lockfile removed | Temporary-directory `npm ci --allow-remote=all` passed; local checks passed |
+| P0-08 | 0 | in_progress | Resolve remaining Prisma/config/deepmerge-ts advisory chain; six findings cleared by removing unused direct packages | Clean production dependency audit or documented risk decisions |
 
 ## Phase 0 checklist
 
@@ -49,7 +50,7 @@ Legend: `open` = not started; `in_progress` = work underway; `blocked` = cannot 
 - [x] Record initial production gaps with source evidence in the plan.
 - [ ] Complete per-file line review register, including used UI controls and all route permissions.
 - [ ] Confirm launch scope, hosting, phone provider, AI provider, database, and deployment region.
-- [ ] Run a **clean** lockfile install and capture CI logs. Local typecheck, lint, tests, and webpack build now pass as recorded below.
+- [ ] Capture CI logs on the pushed branch. A **clean** lockfile install, local typecheck, lint, tests, and webpack build pass as recorded below.
 - [ ] Remove or isolate every production-facing demo/fake behavior and reconcile README claims. The demo login shortcut is now excluded from production builds.
 - [ ] Review historical `.env` and `db/custom.db` exposure, invalidate the stored session, and rotate any real values. Both files are now untracked and ignored locally; Git history is unchanged.
 
@@ -78,6 +79,14 @@ Legend: `open` = not started; `in_progress` = work underway; `blocked` = cannot 
 | 2026-09-29 | Test safety, `vitest.config.ts`, `tests/setup.ts`, `scripts/run-tests.mjs`, `package.json` | `npm test` creates a fresh `/tmp/velora-test-*/test.db`, pushes schema, and refuses a non-test DB in setup. 13/13 tests pass. Local `.env` database was not touched. |
 | 2026-09-29 | Type and lint baseline, shared API/rules types and dashboard effects | `npm run typecheck` exit 0; `npm run lint` exit 0. Initial failures included wrong API wrapper response types, untyped rule map, hardcoded test alias, and effect lint errors. |
 | 2026-09-29 | Build baseline, `src/app/layout.tsx`, `src/app/globals.css`, `package.json` | `DATABASE_URL=file:/tmp/velora-build.db NEXT_TELEMETRY_DISABLED=1 ./node_modules/.bin/next build --webpack` exit 0 outside sandbox. System fonts remove build-time Google font fetch. Build script now uses webpack and standalone start uses Node; a clean install and full script run remain open. |
+| 2026-09-29 | P2-04 runtime and P0-05 CI changes | Node 24 engine, npm lockfile, npm-backed seed/worker/simulator scripts, README quickstart, and `.github/workflows/ci.yml` added. `node --import tsx` loaded a TypeScript app module. Clean `npm ci` verification is running in a temporary directory; CI has not run on GitHub. |
+| 2026-09-29 | P0-08 initial `npm audit --omit=dev --json` | Nine advisories: five high, four moderate. Affected dependency families include `sharp`, Prisma config/`deepmerge-ts`, MDX editor/`js-yaml`, and syntax highlighter/PrismJS. |
+| 2026-09-29 | P0-08 dependency cleanup and repeat audit | No imports found for MDX editor, syntax highlighter, or direct `sharp`. Removed all three and unused `bun-types`; Next includes a newer `sharp`. `npm audit --omit=dev --json` now reports three high findings in the Prisma/config/deepmerge-ts chain. A compatible fix is still open. |
+| 2026-09-29 | P2-04 lockfile check | `npm ci --ignore-scripts --allow-remote=all --cache /tmp/velora-npm-cache` succeeded in a fresh temporary directory: 685 packages installed. Removed `bun.lock` and standardized scripts/docs on Node 24/npm. The isolated check omitted install scripts; normal CI install and Prisma generation are defined in `.github/workflows/ci.yml` and await GitHub execution. |
+| 2026-09-29 | P0-05 local gate after dependency cleanup | `npm run typecheck` exit 0; `npm run lint` exit 0; `npm test` 13/13 pass on `/tmp/velora-test-*`; `DATABASE_URL=file:/tmp/velora-build.db NEXT_TELEMETRY_DISABLED=1 npm run build` exit 0. GitHub CI remains unverified until push. |
+| 2026-09-29 | P2-01 production-facing copy scan | Found analytics text asserting `MockProvider is free` regardless of actual provider and simulator text implying completed transfers/SMS. Added a global preview notice, clarified simulator side effects and non-delivery, and marked analytics as including preview activity. Browser verification remains open. |
+| 2026-09-29 | P0-06 bootstrap implementation and isolated check | Added `npm run bootstrap` for an empty database, requiring operator supplied organization/owner values, a valid timezone and a 16+ character password. It creates no fixed account or sample data. First run against `/tmp/velora-bootstrap-test-*/test.db` exited 0; a direct second run exited 1 with `Bootstrap requires an empty database`. The first combined subprocess check was inconclusive for the second run due sandbox `EPERM`; direct rerun resolved it. `rg` found no fixed demo credential in `.next/standalone` or `.next/static`. |
+| 2026-09-29 | Phase 0 history metadata | `git log -- .env db/custom.db` shows these files in four prior commits, including the initial commit; they are now untracked/ignored. History review and credential/session rotation remain required before release. |
 
 ## Update template
 
