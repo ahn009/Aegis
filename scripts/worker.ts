@@ -2,6 +2,9 @@
 // Run: npm run worker
 import { processOutbox } from "../src/lib/worker/outbox";
 import { db } from "../src/lib/db";
+import { validateProductionConfig } from "../src/lib/production-config";
+
+validateProductionConfig();
 
 const POLL_MS = 15_000;
 

@@ -15,6 +15,8 @@ async function req<T>(url: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   me: () => req<{ user: { id: string; email: string; name: string | null; organizationId: string; role: string } | null; organization?: { id: string; name: string; slug: string; timezone: string } }>("/api/auth/me"),
+  organizations: () => req<{ organizations: { id: string; name: string; timezone: string; role: string }[] }>("/api/auth/organizations"),
+  switchOrganization: (organizationId: string) => req<{ user: { organizationId: string; role: string } }>("/api/auth/switch-organization", { method: "POST", body: JSON.stringify({ organizationId }) }),
   login: (email: string, password: string) => req<{ user: any; organization: any }>("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   logout: () => req<{ loggedOut: boolean }>("/api/auth/logout", { method: "POST" }),
 

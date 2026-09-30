@@ -58,7 +58,7 @@ export function Audit() {
       <Card className="shadow-sm">
         <div className="p-3 bg-amber-50 border-b border-amber-100 text-xs text-amber-800 flex items-center gap-2">
           <ScrollText className="h-3.5 w-3.5" />
-          Append-only audit log — no UPDATE/DELETE endpoints exist. Every mutation (USER, AI_TOOL, or WORKER) writes exactly one row.
+          Append-only audit log — no UPDATE/DELETE endpoints exist. Review individual actions and their recorded outcomes here.
         </div>
         <div className="max-h-[70vh] overflow-y-auto">
           <table className="w-full text-sm">

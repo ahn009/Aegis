@@ -1,6 +1,6 @@
 # Phase 0 source review register
 
-Updated: 2026-09-29. This register records the first pass through first-party application paths and the disposition of production-facing placeholders. A later phase owns the fixes where a finding ID is shown. The `src/components/ui/*` files are generated-style controls; only controls imported by a product screen are in the interaction review scope.
+Updated: 2026-09-30. This register records the first pass through first-party application paths and the disposition of production-facing placeholders. Phase 1 changes to session tenancy and mutation origin checks are reflected below. A later phase owns the fixes where a finding ID is shown. The `src/components/ui/*` files are generated-style controls; only controls imported by a product screen are in the interaction review scope.
 
 ## API route and permission register
 
@@ -8,21 +8,23 @@ Updated: 2026-09-29. This register records the first pass through first-party ap
 
 | Method and route | Current access | Source finding / next phase |
 | --- | --- | --- |
-| `POST /api/auth/login` | Public | P1-06: IP and unknown-account abuse controls |
-| `GET /api/auth/me` | Public, returns null if signed out | P0-07: selected organization not persisted |
-| `POST /api/auth/logout` | Authenticated | P1-05: origin/CSRF for cookie mutation |
+| `POST /api/auth/login` | Public, same-origin mutation | P1-06: IP and unknown-account abuse controls |
+| `GET /api/auth/me` | Public, returns null if signed out | Active organization persisted and checked against membership |
+| `GET /api/auth/organizations` | Authenticated | Lists only caller's memberships for workspace selector |
+| `POST /api/auth/switch-organization` | Authenticated, same-origin mutation | Target membership checked; active organization updated on session |
+| `POST /api/auth/logout` | Authenticated, same-origin mutation | P1-05: consider CSRF token for stricter defense |
 | `GET /api/overview`, `/api/analytics` | Authenticated | P2-01/P2-02: preview records in metrics and local-date handling |
 | `GET /api/calls`, `/api/calls/[id]` | Authenticated | P0-07: tenant selection; otherwise organization-scoped |
 | `GET /api/contacts`, `/api/contacts/[id]` | Authenticated | P0-07: tenant selection; otherwise organization-scoped |
 | `GET /api/leads`, `/api/leads/[id]` | Authenticated | P0-07: tenant selection; otherwise organization-scoped |
 | `PATCH/POST /api/leads/[id]/status` | `DISPATCHER`+ | P1-05: origin/CSRF; duplicate methods to simplify |
 | `GET /api/appointments`, `/api/appointments/[id]/detail` | Authenticated | P0-07: tenant selection; otherwise organization-scoped |
-| `POST /api/appointments/[id]/confirm`, `/cancel` | Authenticated | P1-05: missing role restriction and origin/CSRF |
-| `GET /api/audit` | Authenticated | P1-05: decide whether `VIEWER` can read the full log |
+| `POST /api/appointments/[id]/confirm`, `/cancel` | `DISPATCHER`+, same-origin mutation | P1-05: route-level denial and origin tests pending |
+| `GET /api/audit` | `MANAGER`+ | Full audit records can contain sensitive details; lower roles denied |
 | `GET /api/rules` | Authenticated | P0-07: tenant selection |
-| `POST /api/rules`, `/api/rules/[id]/publish` | `MANAGER`+ | P1-05: origin/CSRF |
-| `GET /api/worker/status` | Authenticated | P1-05: role/data exposure review |
-| `POST /api/worker/run` | `ADMIN`+ | P1-01/P1-05: atomic job claim and origin/CSRF |
+| `POST /api/rules`, `/api/rules/[id]/publish` | `MANAGER`+, same-origin mutation | P1-05: route-level denial tests pending |
+| `GET /api/worker/status` | Authenticated; last error message visible to `ADMIN`+ | Queue counts remain visible to signed-in staff |
+| `POST /api/worker/run` | `ADMIN`+, same-origin mutation | P1-01/P1-05: atomic job claim and route-level denial tests |
 | `POST /api/simulate-call/start`, `/turn`; `GET /api/simulate-call/[conversationId]` | Authenticated in development; 404 in production | P1-03: retry safety; simulator must never write production metrics |
 | `POST /api/webhooks/voice`, `/sms`, `/call-status` | Public in development; 503 in production | P0-01/02/03: real provider, signatures, tenant mapping, and callbacks |
 

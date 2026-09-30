@@ -10,11 +10,12 @@ import { withPublicApi, parseBody, getClientIp } from "@/lib/http";
 const LoginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
+  organizationId: z.string().min(1).optional(),
 });
 
 export const POST = withPublicApi(async (req) => {
   try {
-    const { email, password } = await parseBody(req, LoginSchema);
+    const { email, password, organizationId } = await parseBody(req, LoginSchema);
 
     // 1. Lockout check (don't reveal whether email exists)
     const lockout = await checkLockout(email);
@@ -38,8 +39,14 @@ export const POST = withPublicApi(async (req) => {
     }
 
     await recordSuccessfulLogin(email);
-    const membership = user.memberships[0]!;
-    const { token } = await createSession(user.id, membership.organizationId, membership.role, {
+    const membership = organizationId
+      ? user.memberships.find((item) => item.organizationId === organizationId)
+      : user.memberships.toSorted((a, b) => a.organizationId.localeCompare(b.organizationId))[0];
+    if (!membership) return Response.json(
+      { ok: false, error: { code: "UNAUTHORIZED", message: "Invalid email or password" } },
+      { status: 401 },
+    );
+    const { token } = await createSession(user.id, membership.organizationId, {
       ip: getClientIp(req),
       userAgent: req.headers.get("user-agent") ?? undefined,
     });

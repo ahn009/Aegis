@@ -106,6 +106,8 @@ model Invitation {
 model Session {
   id              String   @id @default(cuid())
   userId          String
+  // Legacy rows without an active organization are rejected on read.
+  activeOrganizationId String?
   // opaque token; hash stored, token returned to client cookie
   tokenHash       String   @unique
   csrfToken       String

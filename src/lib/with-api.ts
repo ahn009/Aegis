@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser, type SessionUser } from "./session";
 import { errorBody, ok } from "./errors";
 import { requireAuth, requireRole, type Role } from "./auth-context";
+import { assertSameOrigin } from "./request-origin";
+import { env } from "./env";
+
+function checkMutationOrigin(req: NextRequest) {
+  const appUrl = env.nodeEnv === "production" ? env.appBaseUrl : req.nextUrl.origin;
+  assertSameOrigin(req.method, req.headers.get("origin"), appUrl);
+}
 
 type HandlerCtx = {
   params: Record<string, string | string[]>;
@@ -22,6 +29,7 @@ export function withApi(handler: AuthedHandler, opts?: { role?: Role }) {
     ctx: { params: Promise<Record<string, string | string[]>> },
   ): Promise<Response> => {
     try {
+      checkMutationOrigin(req);
       const params = await ctx.params;
       const user = await getSessionUser();
       if (opts?.role) requireRole(user, opts.role);
@@ -42,6 +50,7 @@ export function withPublicApi(handler: (req: NextRequest, ctx: { params: Promise
     ctx: { params: Promise<Record<string, string | string[]>> },
   ): Promise<Response> => {
     try {
+      checkMutationOrigin(req);
       return await handler(req, ctx);
     } catch (err) {
       const { status, body } = errorBody(err);

@@ -10,6 +10,8 @@ export default defineConfig({
     environment: "node",
     setupFiles: ["./tests/setup.ts"],
     include: ["tests/**/*.test.ts"],
+    // Every test file uses the same isolated SQLite database and setup seed.
+    fileParallelism: false,
     testTimeout: 30_000,
     hookTimeout: 60_000,
   },

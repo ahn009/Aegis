@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { ok } from "@/lib/errors";
 import { withApi } from "@/lib/http";
+import { hasRole } from "@/lib/auth-context";
 
 // GET /api/worker/status — outbox queue depth + last processed + last error.
 // Read-only; any authed user can view (ADMIN+ to trigger via /api/worker/run).
@@ -19,7 +20,7 @@ export const GET = withApi(async ({ user }) => {
     queue: { pending, processing, dead, done },
     lastProcessedAt: lastProcessed?.processedAt?.toISOString() ?? null,
     lastProcessedType: lastProcessed?.eventType ?? null,
-    lastError: lastError ? { type: lastError.eventType, message: lastError.lastError, at: lastError.createdAt.toISOString() } : null,
+    lastError: lastError ? { type: lastError.eventType, message: hasRole(user.role, "ADMIN") ? lastError.lastError : null, at: lastError.createdAt.toISOString() } : null,
     byStatus: Object.fromEntries(byEventType.map((s) => [s.status, s._count])),
   }));
 });

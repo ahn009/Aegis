@@ -125,7 +125,9 @@ docs/adr/                     # architecture decision records
 ## Current safeguards — production review still required
 
 1. **Tenancy** — authenticated routes use the session organization for their data queries.
-   Live webhook tenant resolution and selected-organization sessions still need Phase 1 work.
+   Sessions now persist the active organization and recheck membership on each read;
+   the login API accepts an optional organization ID, and the dashboard selector
+   switches between memberships. Live webhook tenant resolution still needs Phase 1 work.
 2. **Tool calls** — Zod-validated args; org context injected server-side; invalid args →
    ONE repair round → safe fallback + escalation. Every attempt is audited. Test §2.
 3. **AI tool boundary** — the tool executor validates arguments and re-derives service area
@@ -146,8 +148,10 @@ docs/adr/                     # architecture decision records
    provider delivery confirmation are not implemented.
 10. **SMS simulation** — STOP/UNSUBSCRIBE suppresses simulated sends in the sender service.
     Production sends fail closed until a provider and delivery receipts are implemented.
-11. **Secrets** — AES-256-GCM encrypts stored integration credentials. Production secret
-    validation and full audit/log redaction are still open.
+11. **Secrets** — AES-256-GCM encrypts stored integration credentials. Production web
+    and worker startup validate app secrets, OpenAI settings, HTTPS URLs, and the
+    webhook verification flag. Provider credentials and full audit/log redaction
+    still need Phase 1 review.
 12. **Availability** — slots = business hours − holidays − active appointments − buffers,
     computed in org timezone, DST-aware (`evaluators.ts`).
 
@@ -162,6 +166,7 @@ docs/adr/                     # architecture decision records
 | `OPENAI_API_KEY` | _(empty)_ | Required if provider=openai |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Any OpenAI-compatible endpoint |
 | `OPENAI_MODEL` | `gpt-4o-mini` | Model name |
+| `VELORA_APP_BASE_URL` | `http://localhost:3000` | HTTPS public URL required for production startup |
 | `VELORA_ENCRYPTION_KEY` | dev fallback | AES-256-GCM key for integration creds |
 | `VELORA_SESSION_SECRET` | dev fallback | Session signing + webhook HMAC |
 | `VELORA_VERIFY_WEBHOOKS` | `0` | Set `1` to enforce webhook signatures |

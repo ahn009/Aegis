@@ -4,14 +4,14 @@ Updated: 2026-09-30 · Plan: [production-build-plan.md](production-build-plan.md
 
 ## Current position
 
-Phase 0 is **verified**. Phase 1 is next. The launch target includes live inbound calls, SMS, the dashboard, and AI agents performing daily operations with a trace of every action. OpenAI API is selected. Twilio + paid Render Ohio + managed Postgres is the provisional implementation target in [ADR 0006](adr/0006-production-platform-target.md); provider accounts and deployment remain undecided. The application is **not production ready**.
+Phase 0 is **verified**. Phase 1 is **in progress**. The launch target includes live inbound calls, SMS, the dashboard, and AI agents performing daily operations with a trace of every action. OpenAI API is selected. Twilio + paid Render Ohio + managed Postgres is the provisional implementation target in [ADR 0006](adr/0006-production-platform-target.md); provider accounts and deployment remain undecided. The application is **not production ready**.
 
 Legend: `open` = not started; `in_progress` = work underway; `pending` = deliberately paused for later continuation; `blocked` = cannot proceed without a named dependency; `verified` = acceptance evidence recorded; `deferred` = explicitly removed from release scope with reason.
 
 | Phase | Status | Exit evidence needed |
 | --- | --- | --- |
 | 0. Baseline and truthful surface | verified | [CI run 36718898437](https://github.com/ahn009/Aegis/actions/runs/36718898437) passed; provisional platform target and historical fixture policy recorded |
-| 1. Security and tenancy | open | Cross-tenant, role, CSRF/origin and webhook tests pass |
+| 1. Security and tenancy | in_progress | Cross-tenant, role, CSRF/origin and webhook tests pass |
 | 2. Real integrations | open | Recorded provider sandbox call, transfer, SMS, and delivery status |
 | 3. Reliable data and jobs | open | Concurrency/crash tests; migrations; backup/restore drill |
 | 4. Daily operations agents | open | Bounded workflows with complete action logs, review queue and pause switch |
@@ -25,15 +25,15 @@ Legend: `open` = not started; `in_progress` = work underway; `pending` = deliber
 | P0-01 | 2 | open | Select voice provider and implement live inbound/transfer path | Sandbox call trace + transfer receipt |
 | P0-02 | 2 | open | Replace fake SMS `SENT` and audit-only staff notice | Provider message IDs, delivery/failure callbacks |
 | P0-03 | 1 | open | Authenticate all callbacks; map verified destination to tenant | Forged callback and wrong-tenant integration tests |
-| P0-04 | 1 | open | Validate production secrets and provider config at startup | Failing startup tests for missing/weak values |
+| P0-04 | 1 | in_progress | Complete provider credential and database topology validation; prove web/worker startup failure | Pure config tests cover missing/weak secrets, mock AI, HTTP URLs and disabled verification |
 | P0-05 | 0 | verified | Preserve CI gate as changes continue | [GitHub Actions run 36597887050](https://github.com/ahn009/Aegis/actions/runs/36597887050): clean install, Prisma generation, typecheck, lint, 13 tests, build pass |
 | P0-06 | 0 | verified | Preserve fixture isolation; never deploy or restore tracked historical DB | Historical DB is demo-domain/555 fixture; local session invalidated; clean bootstrap required for deployment |
-| P0-07 | 1 | open | Persist selected organization in session | Multi-org login/switch/role tests |
+| P0-07 | 1 | in_progress | Run route-level and browser checks for login/switch and stale data clearing | Session row persists active org; selector UI added; two-org switch, denied outsider, role change and revocation tests pass |
 | P1-01 | 3 | open | Add atomic outbox claim and idempotent send | Two-worker race + crash/retry tests |
 | P1-02 | 2 | open | Fix provider schema/history and timeout policy | Provider contract and failure tests |
 | P1-03 | 3 | open | Make turn retry safe after partial writes | Retry test with one set of side effects |
 | P1-04 | 3 | open | Make appointment transitions and reminders durable | Confirmation race and crash tests |
-| P1-05 | 1 | open | Define mutation role matrix; enforce CSRF/origin | Viewer/technician denial and cross-site tests |
+| P1-05 | 1 | in_progress | Finish mutation/read role matrix and cross-tenant route tests | Same-Origin mutation gate; appointment writes DISPATCHER+; audit MANAGER+; worker error text ADMIN+; route denial/redaction tests pass |
 | P1-06 | 1 | open | Add trusted-IP and unknown-account abuse controls | Rate-limit tests across accounts/instances |
 | P1-07 | 6 | pending | Preview Caddy config, websocket examples, and shell tests removed; create environment-neutral staging deploy | Staging deployment and smoke test |
 | P1-08 | 3 | open | Choose DB and write migrations/restore plan | Migration and restore evidence |
@@ -99,6 +99,14 @@ Legend: `open` = not started; `in_progress` = work underway; `pending` = deliber
 | 2026-09-30 | Phase 0 checkpoint CI [run 36718898437](https://github.com/ahn009/Aegis/actions/runs/36718898437) | Clean install, Prisma generation, typecheck, lint, 13 tests, and production build all passed on `df6fcf0`. Scoped dependency override is exercised by clean CI; local production audit reports zero findings. |
 | 2026-09-30 | P0-06 historical fixture disposition | Historical files contain a database URL and demo-domain/555 fixture records. Local session invalidated. Retain Git history for traceability, prohibit deployment or restore of historical DB blobs, and require empty database plus operator-provided bootstrap for production. Reopen if real customer data or reusable secrets are identified. |
 | 2026-09-30 | Phase 0 closure | Provisional Twilio + paid Render Ohio + managed Postgres target recorded for implementation only. Phase 0 exit gate met; provider and hosting choice remains a release dependency. Phase 1 security and tenancy work is next. |
+| 2026-09-30 | P0-07 session tenancy | Added nullable active-organization field for legacy compatibility; new sessions always set it, and reads reject legacy/missing memberships. Login accepts selected organization ID, switch API checks membership and updates the session. Two-org/role/revocation tests pass. UI picker and route-level CSRF/role checks remain. |
+| 2026-09-30 | P0-04 partial production config | Web instrumentation and worker call a validator for distinct strong app secrets, OpenAI provider/key, HTTPS URLs, and enabled webhook verification. Ten validation cases pass. A source-level instrumentation check exited 1 on missing config. Initial standalone smoke logged the error but stayed alive; `process.exit(1)` was added and needs a rebuilt standalone smoke. Provider credentials and production DB selection remain open. |
+| 2026-09-30 | Isolated test harness | Added sequential test-file execution because each file's setup resets the same temporary SQLite DB; 25 tests pass. |
+| 2026-09-30 | P1-05 mutation protection | Shared authenticated/public API wrappers reject missing or mismatched Origin on state-changing requests. Appointment confirmation and cancellation require DISPATCHER+. Eight origin cases and four route-level appointment denial/scope cases pass. Full route matrix remains. |
+| 2026-09-30 | P0-07 organization selector | Authenticated organization list and dashboard selector added. Switching remounts the workspace to clear old-org client state. Typecheck and lint pass; browser verification remains. |
+| 2026-09-30 | Phase 1 local gate | `npm test`: 37/37 pass on isolated SQLite; typecheck and lint pass. Production build passed before the latest origin, selector and exit-on-invalid-config edits; a fresh build and CI run are required. |
+| 2026-09-30 | P0-04 standalone startup smoke | Rebuilt production app with the new instrumentation; launch without required secrets exited 1 after logging the missing setting names. Complete provider credential and database validation remains open. |
+| 2026-09-30 | P1-05 sensitive reads | Full audit log now requires MANAGER+ and is hidden from lower-role navigation. Worker queue remains visible to signed-in staff, while raw last-error text requires ADMIN+. Removed an unsupported audit UI claim. Six route-level permission/redaction tests and 39 total tests pass. |
 
 ## Next steps
 

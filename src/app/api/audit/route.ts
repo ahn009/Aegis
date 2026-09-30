@@ -22,4 +22,4 @@ export const GET = withApi(async ({ user, req }) => {
     db.auditLog.count({ where }),
   ]);
   return Response.json(ok({ items, total }));
-});
+}, { role: "MANAGER" });

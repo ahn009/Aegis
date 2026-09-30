@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { db } from "./db";
 import { env } from "./env";
 import { hashToken, randomToken, timingSafeEqualString } from "./crypto";
+import { ApiError } from "./errors";
 
 export const SESSION_COOKIE = "velora_session";
 
@@ -24,7 +25,11 @@ export interface SessionRecord {
   absoluteExpiresAt: Date;
 }
 
-export async function createSession(userId: string, organizationId: string, role: string, meta: { ip?: string; userAgent?: string }) {
+export async function createSession(userId: string, organizationId: string, meta: { ip?: string; userAgent?: string }) {
+  const membership = await db.membership.findUnique({
+    where: { organizationId_userId: { organizationId, userId } },
+  });
+  if (!membership) throw ApiError.forbidden("Organization membership required");
   const token = randomToken(32);
   const tokenHash = hashToken(token);
   const csrfToken = randomToken(16);
@@ -34,6 +39,7 @@ export async function createSession(userId: string, organizationId: string, role
   const session = await db.session.create({
     data: {
       userId,
+      activeOrganizationId: organizationId,
       tokenHash,
       csrfToken,
       ip: meta.ip ?? null,
@@ -42,7 +48,7 @@ export async function createSession(userId: string, organizationId: string, role
       absoluteExpiresAt,
     },
   });
-  return { token, session };
+  return { token, session, role: membership.role };
 }
 
 export async function setSessionCookie(token: string) {
@@ -74,6 +80,11 @@ export async function readSessionCookie(): Promise<string | undefined> {
 export async function getSessionUser(): Promise<SessionUser | null> {
   const token = await readSessionCookie();
   if (!token) return null;
+  return getSessionUserForToken(token);
+}
+
+/** Resolve a token against the organization stored on its session row. */
+export async function getSessionUserForToken(token: string): Promise<SessionUser | null> {
   const tokenHash = hashToken(token);
   const session = await db.session.findUnique({
     where: { tokenHash },
@@ -87,12 +98,9 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     await db.session.delete({ where: { id: session.id } }).catch(() => {});
     return null;
   }
-  // Find active membership — we encode the chosen org id inside the session row
-  // via a side-table approach: we store nothing on session, instead pick the
-  // first OWNER/ADMIN membership or the most recent. To support org switching
-  // we look it up from a separate cookie. For simplicity here we use the first
-  // membership.
-  const membership = session.user.memberships[0];
+  const membership = session.user.memberships.find(
+    (item) => item.organizationId === session.activeOrganizationId,
+  );
   if (!membership) return null;
   // Slide idle expiry
   const newIdle = new Date(now.getTime() + env.sessionIdleMs);
@@ -109,6 +117,27 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     organizationId: membership.organizationId,
     role: membership.role,
   };
+}
+
+export async function switchSessionOrganization(organizationId: string): Promise<SessionUser> {
+  const token = await readSessionCookie();
+  if (!token) throw ApiError.unauthorized();
+  return switchSessionOrganizationForToken(token, organizationId);
+}
+
+export async function switchSessionOrganizationForToken(token: string, organizationId: string): Promise<SessionUser> {
+  const current = await getSessionUserForToken(token);
+  if (!current) throw ApiError.unauthorized();
+  const membership = await db.membership.findUnique({
+    where: { organizationId_userId: { organizationId, userId: current.userId } },
+  });
+  if (!membership) throw ApiError.notFound();
+  const updated = await db.session.updateMany({
+    where: { tokenHash: hashToken(token), userId: current.userId, activeOrganizationId: current.organizationId },
+    data: { activeOrganizationId: organizationId, csrfToken: randomToken(16) },
+  });
+  if (updated.count !== 1) throw ApiError.conflict("Session changed; retry organization switch");
+  return { ...current, organizationId, role: membership.role };
 }
 
 export async function destroySession(): Promise<void> {

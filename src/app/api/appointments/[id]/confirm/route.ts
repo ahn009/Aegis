@@ -6,4 +6,4 @@ export const POST = withApi(async ({ user, params }) => {
   const id = String(params.id);
   await confirmAppointment(user.organizationId, id, user.userId, "USER");
   return Response.json(ok({ confirmed: true }));
-});
+}, { role: "DISPATCHER" });

@@ -10,4 +10,4 @@ export const POST = withApi(async ({ user, params, req }) => {
   const { reason } = await parseBody(req, Schema);
   await cancelAppointment(user.organizationId, id, reason, user.userId, "USER");
   return Response.json(ok({ cancelled: true }));
-});
+}, { role: "DISPATCHER" });

@@ -53,5 +53,5 @@ export default function Home() {
   }
 
   if (!user) return <Login onLoggedIn={refreshMe} />;
-  return <Shell user={user} org={org} onLogout={async () => { try { await api.logout(); } catch {} setUser(null); }} />;
+  return <Shell key={user.organizationId} user={user} org={org} onOrganizationChanged={refreshMe} onLogout={async () => { try { await api.logout(); } catch {} setUser(null); }} />;
 }

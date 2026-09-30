@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { AuthUser, OrgInfo } from "@/app/page";
+import { api } from "@/lib/api-client";
 import { Overview } from "./overview";
 import { Calls } from "./calls";
 import { Contacts } from "./contacts";
@@ -33,12 +34,40 @@ const NAV: { id: ViewId; label: string; icon: React.ComponentType<{ className?: 
   { id: "audit", label: "Audit Log", icon: ScrollText, group: "Compliance" },
 ];
 
-export function Shell({ user, org, onLogout }: { user: AuthUser; org: OrgInfo | null; onLogout: () => void }) {
+export function Shell({ user, org, onLogout, onOrganizationChanged }: { user: AuthUser; org: OrgInfo | null; onLogout: () => void; onOrganizationChanged: () => Promise<void> }) {
   const [view, setView] = useState<ViewId>("overview");
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [organizations, setOrganizations] = useState<{ id: string; name: string; timezone: string; role: string }[]>([]);
+  const [switching, setSwitching] = useState(false);
+  const [switchError, setSwitchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void api.organizations().then((data) => {
+      if (active) setOrganizations(data.organizations);
+    }).catch((error) => {
+      if (active) setSwitchError((error as Error).message);
+    });
+    return () => { active = false; };
+  }, []);
+
+  async function changeOrganization(organizationId: string) {
+    setSwitching(true);
+    setSwitchError(null);
+    try {
+      await api.switchOrganization(organizationId);
+      await onOrganizationChanged();
+    } catch (error) {
+      setSwitchError((error as Error).message);
+    } finally {
+      setSwitching(false);
+    }
+  }
 
   const initials = (user.name ?? user.email).slice(0, 2).toUpperCase();
-  const navGroups = Array.from(new Set(NAV.map((n) => n.group)));
+  const canViewAudit = ["OWNER", "ADMIN", "MANAGER"].includes(user.role);
+  const visibleNav = NAV.filter((item) => item.id !== "audit" || canViewAudit);
+  const navGroups = Array.from(new Set(visibleNav.map((n) => n.group)));
 
   return (
     <div className="min-h-screen flex flex-col bg-zinc-50">
@@ -64,7 +93,7 @@ export function Shell({ user, org, onLogout }: { user: AuthUser; org: OrgInfo | 
             {navGroups.map((group) => (
               <div key={group} className="space-y-1">
                 <div className="px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-1.5">{group}</div>
-                {NAV.filter((n) => n.group === group).map((n) => {
+                {visibleNav.filter((n) => n.group === group).map((n) => {
                   const Icon = n.icon;
                   const active = view === n.id;
                   return (
@@ -112,8 +141,20 @@ export function Shell({ user, org, onLogout }: { user: AuthUser; org: OrgInfo | 
                 <p className="text-xs text-muted-foreground">{org?.name ?? "—"} · {org?.timezone}</p>
               </div>
             </div>
-            <WorkerStatus canTrigger={["OWNER", "ADMIN"].includes(user.role)} />
+            <div className="flex items-center gap-3">
+              {organizations.length > 1 && (
+                <label className="text-xs text-zinc-600">
+                  <span className="sr-only">Active organization</span>
+                  <select aria-label="Active organization" value={user.organizationId} disabled={switching} onChange={(event) => void changeOrganization(event.target.value)} className="max-w-36 rounded-md border bg-white px-2 py-1.5 text-xs sm:max-w-56">
+                    {organizations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                  </select>
+                </label>
+              )}
+              <WorkerStatus canTrigger={["OWNER", "ADMIN"].includes(user.role)} />
+            </div>
           </header>
+
+          {switchError && <p role="alert" className="border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700 sm:px-6">Organization switch failed: {switchError}</p>}
 
           <div role="status" className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900 sm:px-6">
             Preview workspace: calls, messages, and transfers are simulated. Dashboard totals can include preview activity.
