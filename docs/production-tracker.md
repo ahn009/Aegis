@@ -28,7 +28,7 @@ Legend: `open` = not started; `in_progress` = work underway; `pending` = deliber
 | P0-04 | 1 | in_progress | Verify rebuilt web startup with Twilio requirements and finalize deployment database validation in Phase 3 | Pure config tests and web/worker invalid-config exit checks pass; Twilio SID/token shape required |
 | P0-05 | 0 | verified | Preserve CI gate as changes continue | [GitHub Actions run 36597887050](https://github.com/ahn009/Aegis/actions/runs/36597887050): clean install, Prisma generation, typecheck, lint, 13 tests, build pass |
 | P0-06 | 0 | verified | Preserve fixture isolation; never deploy or restore tracked historical DB | Historical DB is demo-domain/555 fixture; local session invalidated; clean bootstrap required for deployment |
-| P0-07 | 1 | in_progress | Run route-level and browser checks for login/switch and stale data clearing | Session row persists active org; selector UI added; two-org switch, denied outsider, role change and revocation tests pass |
+| P0-07 | 1 | in_progress | Run route-level and browser checks for login/switch and stale data clearing | Session row persists active org; selector UI added; two-org switch, denied outsider, role change and revocation tests pass; local Chrome sign-in and two-org contact isolation pass |
 | P1-01 | 3 | open | Add atomic outbox claim and idempotent send | Two-worker race + crash/retry tests |
 | P1-02 | 2 | open | Fix provider schema/history and timeout policy | Provider contract and failure tests |
 | P1-03 | 3 | open | Make turn retry safe after partial writes | Retry test with one set of side effects |
@@ -114,6 +114,9 @@ Legend: `open` = not started; `in_progress` = work underway; `pending` = deliber
 | 2026-09-30 | P1-06 persistent login abuse control | Replaced per-user in-process lockout with shared database attempts keyed by HMAC of normalized email and optional trusted IP. Unknown and known account names use the same rolling limit; trusted Render IPs have a separate spray limit. Forwarded headers are ignored unless `VELORA_TRUSTED_PROXY=render`. Worker prunes expired attempts hourly. Staging proxy behavior and multi-instance races remain open. |
 | 2026-09-30 | P0-03 clean CI [run 36728613969](https://github.com/ahn009/Aegis/actions/runs/36728613969) | Callback-security checkpoint passed clean install, Prisma generation, typecheck, lint, tests, and production build. |
 | 2026-09-30 | P1-06 local verification | Prisma generation, `npm test` 51/51, typecheck, lint and webpack production build pass after shared attempt table and worker cleanup. Clean CI on this change remains. |
+| 2026-09-30 | P0-07 local browser check | Headless Chrome signed in against isolated SQLite fixtures, opened contacts in the first organization, switched to the second, and confirmed only the second organization's contact was visible. No page errors. Development mutation origin validation now uses the incoming Host because Next's normalized request URL disagreed with the browser origin on localhost. |
+| 2026-09-30 | P0-04 instrumentation cleanup | Node-only production configuration validation moved to a dynamic import so the Edge compiler does not bundle `process.exit`. Disabled Next's generated agent instruction files in `next.config.ts`. Rebuilt standalone server exits 1 when required production settings are absent. |
+| 2026-09-30 | Phase 1 local checkpoint | `npm test` 51/51, typecheck, lint, webpack production build, and missing-config standalone exit check pass after browser-origin correction. Local Chrome login, organization switch, and cross-organization contact visibility check pass. CI verification pending push. |
 
 ## Next steps
 

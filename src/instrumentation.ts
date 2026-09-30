@@ -1,10 +1,6 @@
-import { validateProductionConfig } from "./lib/production-config";
-
-export function register() {
-  try {
-    validateProductionConfig();
-  } catch (error) {
-    console.error(error);
-    process.exit(1);
+export async function register() {
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    const { validateNodeStartup } = await import("./instrumentation-node");
+    validateNodeStartup();
   }
 }

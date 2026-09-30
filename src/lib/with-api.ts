@@ -6,7 +6,9 @@ import { assertSameOrigin } from "./request-origin";
 import { env } from "./env";
 
 function checkMutationOrigin(req: NextRequest) {
-  const appUrl = env.nodeEnv === "production" ? env.appBaseUrl : req.nextUrl.origin;
+  const host = req.headers.get("host");
+  const devUrl = host ? `${req.nextUrl.protocol}//${host}` : req.nextUrl.origin;
+  const appUrl = env.nodeEnv === "production" ? env.appBaseUrl : devUrl;
   assertSameOrigin(req.method, req.headers.get("origin"), appUrl);
 }
 
