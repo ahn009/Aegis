@@ -8,6 +8,6 @@ import { requireRole } from "@/lib/auth-context";
 // trigger a run and is also useful for tests.
 export const POST = withApi(async ({ user }) => {
   requireRole(user, "ADMIN");
-  const result = await processOutbox(100);
+  const result = await processOutbox(100, user.organizationId);
   return Response.json(ok(result));
 }, { role: "ADMIN" });

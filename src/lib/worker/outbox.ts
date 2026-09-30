@@ -24,12 +24,13 @@ export interface WorkerRunResult {
   byEventType: Record<string, number>;
 }
 
-export async function processOutbox(maxItems = 50): Promise<WorkerRunResult> {
+export async function processOutbox(maxItems = 50, organizationId?: string): Promise<WorkerRunResult> {
   const result: WorkerRunResult = { processed: 0, succeeded: 0, failed: 0, deadLettered: 0, byEventType: {} };
   const now = new Date();
   // Claim a batch of due, pending/processing-stale events.
   const due = await db.outboxEvent.findMany({
     where: {
+      ...(organizationId ? { organizationId } : {}),
       status: { in: ["PENDING", "PROCESSING"] },
       processAfter: { lte: now },
     },
@@ -44,7 +45,7 @@ export async function processOutbox(maxItems = 50): Promise<WorkerRunResult> {
       // Idempotency: check if already processed by key
       if (ev.idempotencyKey) {
         const done = await db.outboxEvent.findFirst({
-          where: { idempotencyKey: ev.idempotencyKey, status: "DONE", id: { not: ev.id } },
+          where: { organizationId: ev.organizationId, idempotencyKey: ev.idempotencyKey, status: "DONE", id: { not: ev.id } },
         });
         if (done) {
           await db.outboxEvent.update({ where: { id: ev.id }, data: { status: "DONE", processedAt: now } });

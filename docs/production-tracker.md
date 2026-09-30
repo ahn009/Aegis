@@ -33,7 +33,7 @@ Legend: `open` = not started; `in_progress` = work underway; `pending` = deliber
 | P1-02 | 2 | open | Fix provider schema/history and timeout policy | Provider contract and failure tests |
 | P1-03 | 3 | open | Make turn retry safe after partial writes | Retry test with one set of side effects |
 | P1-04 | 3 | open | Make appointment transitions and reminders durable | Confirmation race and crash tests |
-| P1-05 | 1 | in_progress | Finish mutation/read role matrix and cross-tenant route tests | Same-Origin mutation gate; appointment writes DISPATCHER+; audit MANAGER+; worker error text ADMIN+; route denial/redaction tests pass |
+| P1-05 | 1 | in_progress | Finish mutation/read role matrix and cross-tenant route tests | Same-Origin mutation gate; appointment writes DISPATCHER+; audit MANAGER+; worker error text ADMIN+; manual worker run scoped to active org; contact route isolation tests pass |
 | P1-06 | 1 | in_progress | Verify Render forwarded-IP behavior in staging and concurrent/multi-instance limits | Database-backed unknown/known email attempts, opt-in trusted-IP limit, worker cleanup and isolated tests pass |
 | P1-07 | 6 | pending | Preview Caddy config, websocket examples, and shell tests removed; create environment-neutral staging deploy | Staging deployment and smoke test |
 | P1-08 | 3 | open | Choose DB and write migrations/restore plan | Migration and restore evidence |
@@ -117,6 +117,8 @@ Legend: `open` = not started; `in_progress` = work underway; `pending` = deliber
 | 2026-09-30 | P0-07 local browser check | Headless Chrome signed in against isolated SQLite fixtures, opened contacts in the first organization, switched to the second, and confirmed only the second organization's contact was visible. No page errors. Development mutation origin validation now uses the incoming Host because Next's normalized request URL disagreed with the browser origin on localhost. |
 | 2026-09-30 | P0-04 instrumentation cleanup | Node-only production configuration validation moved to a dynamic import so the Edge compiler does not bundle `process.exit`. Disabled Next's generated agent instruction files in `next.config.ts`. Rebuilt standalone server exits 1 when required production settings are absent. |
 | 2026-09-30 | Phase 1 local checkpoint | `npm test` 51/51, typecheck, lint, webpack production build, and missing-config standalone exit check pass after browser-origin correction. Local Chrome login, organization switch, and cross-organization contact visibility check pass. CI verification pending push. |
+| 2026-09-30 | Phase 1 browser/startup CI [run 36741295684](https://github.com/ahn009/Aegis/actions/runs/36741295684) | Clean install, Prisma generation, typecheck, lint, tests, and production build passed for `f88fb11`. |
+| 2026-09-30 | P1-05 manual worker and contact route scope | Dashboard-triggered worker run now selects only the active organization's queued jobs; standalone background worker still selects all tenants. Idempotency lookup now includes organization. Isolated tests confirm MANAGER denial, ADMIN run leaves another tenant's event pending, and contact detail/list do not expose another tenant's record. `npm test` 53/53, typecheck, lint, and production build pass; CI pending. Atomic outbox claim remains Phase 3. |
 
 ## Next steps
 

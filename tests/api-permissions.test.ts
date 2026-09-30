@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
+import { randomUUID } from "node:crypto";
 import { db } from "../src/lib/db";
 
 const getSessionUser = vi.hoisted(() => vi.fn());
@@ -9,6 +10,9 @@ import { POST as confirm } from "../src/app/api/appointments/[id]/confirm/route"
 import { POST as cancel } from "../src/app/api/appointments/[id]/cancel/route";
 import { GET as audit } from "../src/app/api/audit/route";
 import { GET as workerStatus } from "../src/app/api/worker/status/route";
+import { POST as runWorker } from "../src/app/api/worker/run/route";
+import { GET as contactDetail } from "../src/app/api/contacts/[id]/route";
+import { GET as contactList } from "../src/app/api/contacts/route";
 
 const context = { params: Promise.resolve({ id: "missing-appointment" }) };
 const user = { userId: "test-user", organizationId: "test-organization", email: "user@example.test", name: null };
@@ -70,5 +74,50 @@ describe("sensitive read boundary", () => {
     getSessionUser.mockResolvedValue({ ...user, organizationId: org.id, role: "ADMIN" });
     const adminResponse = await workerStatus(new NextRequest("http://localhost:3000/api/worker/status"), context);
     expect((await adminResponse.json()).data.lastError.message).toBe("private provider detail");
+  });
+});
+
+describe("manual worker tenant boundary", () => {
+  beforeEach(() => getSessionUser.mockReset());
+
+  it("requires an administrator and processes only their organization's jobs", async () => {
+    const first = await db.organization.findUniqueOrThrow({ where: { slug: "dfw-velora-hvac" } });
+    const second = await db.organization.create({ data: { name: "Second worker tenant", slug: `worker-${randomUUID()}` } });
+    const [ownEvent, otherEvent] = await Promise.all([
+      db.outboxEvent.create({ data: { organizationId: first.id, eventType: "HOLD_EXPIRE", payloadJson: JSON.stringify({ appointmentId: "missing" }) } }),
+      db.outboxEvent.create({ data: { organizationId: second.id, eventType: "HOLD_EXPIRE", payloadJson: JSON.stringify({ appointmentId: "missing" }) } }),
+    ]);
+
+    getSessionUser.mockResolvedValue({ ...user, organizationId: first.id, role: "MANAGER" });
+    expect((await runWorker(request("/api/worker/run"), context)).status).toBe(403);
+
+    getSessionUser.mockResolvedValue({ ...user, organizationId: first.id, role: "ADMIN" });
+    const response = await runWorker(request("/api/worker/run"), context);
+    expect(response.status).toBe(200);
+    expect((await response.json()).data.processed).toBe(1);
+    expect((await db.outboxEvent.findUniqueOrThrow({ where: { id: ownEvent.id } })).status).toBe("DONE");
+    expect((await db.outboxEvent.findUniqueOrThrow({ where: { id: otherEvent.id } })).status).toBe("PENDING");
+  });
+});
+
+describe("contact read tenant boundary", () => {
+  beforeEach(() => getSessionUser.mockReset());
+
+  it("hides another organization's contact from both detail and list routes", async () => {
+    const first = await db.organization.findUniqueOrThrow({ where: { slug: "dfw-velora-hvac" } });
+    const second = await db.organization.create({ data: { name: "Second contact tenant", slug: `contacts-${randomUUID()}` } });
+    const contact = await db.contact.create({ data: { organizationId: second.id, phoneE164: "+12145550998", name: "Other tenant private contact" } });
+    const detailContext = { params: Promise.resolve({ id: contact.id }) };
+
+    getSessionUser.mockResolvedValue({ ...user, organizationId: first.id, role: "VIEWER" });
+    expect((await contactDetail(new NextRequest(`http://localhost:3000/api/contacts/${contact.id}`), detailContext)).status).toBe(404);
+    const firstList = await contactList(new NextRequest("http://localhost:3000/api/contacts"), context);
+    expect(firstList.status).toBe(200);
+    expect((await firstList.json()).data.items).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: contact.id })]));
+
+    getSessionUser.mockResolvedValue({ ...user, organizationId: second.id, role: "VIEWER" });
+    const secondDetail = await contactDetail(new NextRequest(`http://localhost:3000/api/contacts/${contact.id}`), detailContext);
+    expect(secondDetail.status).toBe(200);
+    expect((await secondDetail.json()).data.contact.id).toBe(contact.id);
   });
 });
