@@ -16,9 +16,10 @@ const LoginSchema = z.object({
 export const POST = withPublicApi(async (req) => {
   try {
     const { email, password, organizationId } = await parseBody(req, LoginSchema);
+    const clientIp = getClientIp(req);
 
     // 1. Lockout check (don't reveal whether email exists)
-    const lockout = await checkLockout(email);
+    const lockout = await checkLockout(email, clientIp);
     assertLockout(lockout);
 
     const user = await db.user.findUnique({
@@ -29,7 +30,7 @@ export const POST = withPublicApi(async (req) => {
     const valid = user ? verifyPassword(password, user.passwordHash) : false;
 
     if (!user || !valid || user.memberships.length === 0) {
-      const res = await recordFailedLogin(email);
+      const res = await recordFailedLogin(email, clientIp);
       // If now locked, surface that
       if (!res.ok) assertLockout(res);
       return Response.json(
@@ -47,7 +48,7 @@ export const POST = withPublicApi(async (req) => {
       { status: 401 },
     );
     const { token } = await createSession(user.id, membership.organizationId, {
-      ip: getClientIp(req),
+      ip: clientIp,
       userAgent: req.headers.get("user-agent") ?? undefined,
     });
     await setSessionCookie(token);

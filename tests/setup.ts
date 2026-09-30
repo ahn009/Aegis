@@ -59,6 +59,7 @@ const TABLES = [
   "Contact",
   "AiSession",
   "InboundNumber",
+  "LoginAttempt",
   "User",
   "Organization",
 ];

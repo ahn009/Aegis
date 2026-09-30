@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ZodType, ZodError } from "zod";
 import { ApiError } from "./errors";
+import { isIP } from "node:net";
 
 // Re-export the route wrappers so API routes can import everything from "@/lib/http".
 export { withApi, withPublicApi, ok } from "./with-api";
@@ -47,7 +48,10 @@ export async function parseQuery<T>(req: NextRequest, schema: ZodType<T>): Promi
 }
 
 export function getClientIp(req: NextRequest): string | undefined {
+  // Only the configured edge deployment may supply a trusted forwarded address.
+  // This setting must be checked against the actual proxy behavior in staging.
+  if (process.env.VELORA_TRUSTED_PROXY !== "render") return undefined;
   const fwd = req.headers.get("x-forwarded-for");
-  if (fwd) return fwd.split(",")[0]!.trim();
-  return req.headers.get("x-real-ip") ?? undefined;
+  const candidate = fwd?.split(",")[0]?.trim();
+  return candidate && isIP(candidate) ? candidate : undefined;
 }

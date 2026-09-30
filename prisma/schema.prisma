@@ -86,6 +86,16 @@ model User {
   sessions      Session[]
 }
 
+// Shared login-abuse history. Keys are HMACs of normalized email or trusted IP.
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  keyHash   String
+  createdAt DateTime @default(now())
+
+  @@index([keyHash, createdAt])
+  @@index([createdAt])
+}
+
 model Membership {
   id              String   @id @default(cuid())
   organizationId  String

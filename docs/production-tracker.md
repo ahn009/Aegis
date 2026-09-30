@@ -34,7 +34,7 @@ Legend: `open` = not started; `in_progress` = work underway; `pending` = deliber
 | P1-03 | 3 | open | Make turn retry safe after partial writes | Retry test with one set of side effects |
 | P1-04 | 3 | open | Make appointment transitions and reminders durable | Confirmation race and crash tests |
 | P1-05 | 1 | in_progress | Finish mutation/read role matrix and cross-tenant route tests | Same-Origin mutation gate; appointment writes DISPATCHER+; audit MANAGER+; worker error text ADMIN+; route denial/redaction tests pass |
-| P1-06 | 1 | open | Add trusted-IP and unknown-account abuse controls | Rate-limit tests across accounts/instances |
+| P1-06 | 1 | in_progress | Verify Render forwarded-IP behavior in staging and concurrent/multi-instance limits | Database-backed unknown/known email attempts, opt-in trusted-IP limit, worker cleanup and isolated tests pass |
 | P1-07 | 6 | pending | Preview Caddy config, websocket examples, and shell tests removed; create environment-neutral staging deploy | Staging deployment and smoke test |
 | P1-08 | 3 | open | Choose DB and write migrations/restore plan | Migration and restore evidence |
 | P1-09 | 4 | open | Define agent roles, tasks and approval policy | Approved design + task schema and policy tests |
@@ -111,6 +111,9 @@ Legend: `open` = not started; `in_progress` = work underway; `pending` = deliber
 | 2026-09-30 | P0-04 worker startup | `NODE_ENV=production ... node --import tsx scripts/worker.ts` exited 1 with missing setting names. Rebuilt web standalone also exited 1 when Twilio and other required values were absent. |
 | 2026-09-30 | P0-03 route-level callback gate | Signed dev callback tests prove voice maps by destination despite a forged `organizationId`, replay is deduplicated, unsigned voice is denied, unmapped SMS is denied, mapped SMS persists once, and status rejects a mismatched destination. `npm test`: 46/46 pass on isolated SQLite. Production callbacks remain disabled pending real provider behavior. |
 | 2026-09-30 | P0-03 local checkpoint gate | `npm run typecheck`, `npm run lint`, 46 isolated tests, webpack production build, and `npm audit --omit=dev --json` passed; audit has zero findings. Fresh clean CI is needed after push. |
+| 2026-09-30 | P1-06 persistent login abuse control | Replaced per-user in-process lockout with shared database attempts keyed by HMAC of normalized email and optional trusted IP. Unknown and known account names use the same rolling limit; trusted Render IPs have a separate spray limit. Forwarded headers are ignored unless `VELORA_TRUSTED_PROXY=render`. Worker prunes expired attempts hourly. Staging proxy behavior and multi-instance races remain open. |
+| 2026-09-30 | P0-03 clean CI [run 36728613969](https://github.com/ahn009/Aegis/actions/runs/36728613969) | Callback-security checkpoint passed clean install, Prisma generation, typecheck, lint, tests, and production build. |
+| 2026-09-30 | P1-06 local verification | Prisma generation, `npm test` 51/51, typecheck, lint and webpack production build pass after shared attempt table and worker cleanup. Clean CI on this change remains. |
 
 ## Next steps
 
