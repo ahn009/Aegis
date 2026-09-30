@@ -1,6 +1,6 @@
 # ADR 0006: Working production platform target
 
-Status: proposed for implementation; provider accounts and deployment are not authorized by this document.
+Status: provisional implementation target; provider accounts and deployment are not authorized by this document. Revisit before creating resources.
 
 The first production release covers both live inbound voice/SMS and the dashboard with AI agents for daily operations. OpenAI is the selected AI provider. The operator wants service-level enable/disable controls in a later product increment; the first release still has to meet the live service gates.
 

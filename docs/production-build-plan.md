@@ -1,12 +1,12 @@
 # Velora production build plan
 
-Status: **audit and planning in progress** · Started: 2026-09-29 · Source of truth for execution: [production-tracker.md](production-tracker.md)
+Status: **Phase 0 verified; Phase 1 next** · Started: 2026-09-29 · Source of truth for execution: [production-tracker.md](production-tracker.md)
 
 ## Goal and launch contract
 
 Ship an AI-operated daily operations system that reports only real outcomes, protects each organization's data, keeps an accountable record of every agent action, and can be deployed, observed, backed up, and rolled back. A feature is production complete only when its real integration, failure behavior, tests, operator instructions, and deployment check are complete. A visual placeholder, mock success, or passing unit test alone does not close a task.
 
-**Launch scope:** live inbound voice, SMS, dashboard, and AI agents for daily operations. The operator selected the OpenAI API. [ADR 0006](adr/0006-production-platform-target.md) proposes Twilio, paid Render Ohio, and managed Postgres as the working integration/deployment target; provider and hosting acceptance is pending. A later product increment should allow operators to disable individual services temporarily. CRM scope remains undecided.
+**Launch scope:** live inbound voice, SMS, dashboard, and AI agents for daily operations. The operator selected the OpenAI API. [ADR 0006](adr/0006-production-platform-target.md) sets Twilio, paid Render Ohio, and managed Postgres as a provisional implementation target; the provider and hosting choice must be confirmed before creating resources. A later product increment should allow operators to disable individual services temporarily. CRM scope remains undecided.
 
 ## Audit baseline
 
