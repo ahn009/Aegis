@@ -6,7 +6,6 @@
 // worklog and .skip the test with a comment, never patching src/.
 // ============================================================================
 import { describe, it, expect, beforeAll } from "vitest";
-import crypto from "node:crypto";
 import { db } from "../src/lib/db";
 import {
   bookAppointment,
@@ -36,8 +35,7 @@ import {
   computeAvailability,
 } from "../src/lib/rules/evaluators";
 import { startInboundCall } from "../src/lib/domain/calls";
-import { encrypt, timingSafeEqualString, randomToken } from "../src/lib/crypto";
-import { env } from "../src/lib/env";
+import { encrypt, randomToken } from "../src/lib/crypto";
 import type {
   AiProvider,
   ProviderInput,
@@ -392,23 +390,6 @@ describe("4. webhook dedup + signature rejection", () => {
     expect(errorCode).toBe("P2002"); // Prisma unique-constraint violation
   });
 
-  it("signature: HMAC-SHA256 verification logic rejects a wrong signature (route enforcement is a known bug — see worklog)", async () => {
-    // The SMS webhook route documents `x-velora-sig = HMAC-SHA256(body, VELORA_SESSION_SECRET)`
-    // when VELORA_VERIFY_WEBHOOKS=1, but does NOT actually implement the check
-    // (it always sets signatureValid: true). This test proves the crypto
-    // primitive works so the constraint CAN be enforced; the route bug is
-    // documented in the worklog.
-    const body = JSON.stringify({ From: "+12145550004", Body: "STOP" });
-    const secret = env.sessionSecret;
-    const goodSig = crypto.createHmac("sha256", secret).update(body).digest("hex");
-    const badSig = crypto.createHmac("sha256", "wrong-secret").update(body).digest("hex");
-
-    expect(timingSafeEqualString(goodSig, goodSig)).toBe(true);
-    expect(timingSafeEqualString(badSig, goodSig)).toBe(false);
-
-    // Sanity: the documented header scheme produces a stable, comparable hex digest.
-    expect(goodSig).toMatch(/^[0-9a-f]{64}$/);
-  });
 });
 
 // ============================================================================

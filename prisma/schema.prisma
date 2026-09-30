@@ -45,6 +45,20 @@ model Organization {
   webhookEvents   WebhookEvent[]
   missedRecoveries MissedCallRecovery[]
   aiSessions      AiSession[]
+  inboundNumbers  InboundNumber[]
+}
+
+// Verified destination numbers provide the only inbound voice/SMS tenant map.
+model InboundNumber {
+  id             String @id @default(cuid())
+  organizationId String
+  phoneE164      String @unique
+  provider       String @default("twilio")
+  createdAt      DateTime @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
 }
 
 enum Role {

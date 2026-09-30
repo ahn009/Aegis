@@ -24,8 +24,8 @@ Legend: `open` = not started; `in_progress` = work underway; `pending` = deliber
 | --- | --- | --- | --- | --- |
 | P0-01 | 2 | open | Select voice provider and implement live inbound/transfer path | Sandbox call trace + transfer receipt |
 | P0-02 | 2 | open | Replace fake SMS `SENT` and audit-only staff notice | Provider message IDs, delivery/failure callbacks |
-| P0-03 | 1 | open | Authenticate all callbacks; map verified destination to tenant | Forged callback and wrong-tenant integration tests |
-| P0-04 | 1 | in_progress | Complete provider credential and database topology validation; prove web/worker startup failure | Pure config tests cover missing/weak secrets, mock AI, HTTP URLs and disabled verification |
+| P0-03 | 1 | in_progress | Verify callback routes against forged and cross-tenant requests; make processing retry safe before enabling production | Twilio SDK signature and account checks, unique destination mapping, unknown-number rejection tests pass; production routes remain 503 |
+| P0-04 | 1 | in_progress | Verify rebuilt web startup with Twilio requirements and finalize deployment database validation in Phase 3 | Pure config tests and web/worker invalid-config exit checks pass; Twilio SID/token shape required |
 | P0-05 | 0 | verified | Preserve CI gate as changes continue | [GitHub Actions run 36597887050](https://github.com/ahn009/Aegis/actions/runs/36597887050): clean install, Prisma generation, typecheck, lint, 13 tests, build pass |
 | P0-06 | 0 | verified | Preserve fixture isolation; never deploy or restore tracked historical DB | Historical DB is demo-domain/555 fixture; local session invalidated; clean bootstrap required for deployment |
 | P0-07 | 1 | in_progress | Run route-level and browser checks for login/switch and stale data clearing | Session row persists active org; selector UI added; two-org switch, denied outsider, role change and revocation tests pass |
@@ -107,6 +107,10 @@ Legend: `open` = not started; `in_progress` = work underway; `pending` = deliber
 | 2026-09-30 | Phase 1 local gate | `npm test`: 37/37 pass on isolated SQLite; typecheck and lint pass. Production build passed before the latest origin, selector and exit-on-invalid-config edits; a fresh build and CI run are required. |
 | 2026-09-30 | P0-04 standalone startup smoke | Rebuilt production app with the new instrumentation; launch without required secrets exited 1 after logging the missing setting names. Complete provider credential and database validation remains open. |
 | 2026-09-30 | P1-05 sensitive reads | Full audit log now requires MANAGER+ and is hidden from lower-role navigation. Worker queue remains visible to signed-in staff, while raw last-error text requires ADMIN+. Removed an unsupported audit UI claim. Six route-level permission/redaction tests and 39 total tests pass. |
+| 2026-09-30 | P0-03 callback foundation | Added unique inbound-number tenant map; dev seed and isolated tests populate it. Replaced optional shared-secret verification with Twilio SDK form-signature and account checks in voice/SMS/status callbacks. No callback accepts caller-supplied organization ID or first-org fallback. Production routes remain 503. Four signature/mapping tests pass; 43 total tests, typecheck and lint pass. Provider sandbox and retry-safe processing remain open. [Twilio guidance](https://www.twilio.com/docs/usage/webhooks/webhooks-security). |
+| 2026-09-30 | P0-04 worker startup | `NODE_ENV=production ... node --import tsx scripts/worker.ts` exited 1 with missing setting names. Rebuilt web standalone also exited 1 when Twilio and other required values were absent. |
+| 2026-09-30 | P0-03 route-level callback gate | Signed dev callback tests prove voice maps by destination despite a forged `organizationId`, replay is deduplicated, unsigned voice is denied, unmapped SMS is denied, mapped SMS persists once, and status rejects a mismatched destination. `npm test`: 46/46 pass on isolated SQLite. Production callbacks remain disabled pending real provider behavior. |
+| 2026-09-30 | P0-03 local checkpoint gate | `npm run typecheck`, `npm run lint`, 46 isolated tests, webpack production build, and `npm audit --omit=dev --json` passed; audit has zero findings. Fresh clean CI is needed after push. |
 
 ## Next steps
 

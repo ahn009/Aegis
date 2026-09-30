@@ -137,9 +137,9 @@ docs/adr/                     # architecture decision records
 5. **Booking** — transactional overlap re-check inside a write transaction; SQLite
    serializes writers so the re-check is atomic in the current SQLite test. The production
    database race must be tested after the PostgreSQL migration.
-6. **Webhooks** — optional shared-secret verification in voice/SMS and dedup on
-   `(provider, externalId)`. The status callback is unverified and tenant resolution is unsafe
-   for live use; see P0-03 in the production plan.
+6. **Webhooks** — Twilio-form callback code verifies SDK signatures and the account SID,
+   then maps the signed destination number to an organization. Production callback routes
+   still return 503 until live voice/SMS and durable callback processing are complete.
 7. **Conversation state machine** — `assertTransition()` blocks illegal transitions in
    code, never by prompt alone. ESCALATION reachable from every state.
 8. **Audit** — actions write `AuditLog` rows and there are no UPDATE/DELETE endpoints for
@@ -149,9 +149,8 @@ docs/adr/                     # architecture decision records
 10. **SMS simulation** — STOP/UNSUBSCRIBE suppresses simulated sends in the sender service.
     Production sends fail closed until a provider and delivery receipts are implemented.
 11. **Secrets** — AES-256-GCM encrypts stored integration credentials. Production web
-    and worker startup validate app secrets, OpenAI settings, HTTPS URLs, and the
-    webhook verification flag. Provider credentials and full audit/log redaction
-    still need Phase 1 review.
+    and worker startup validate app secrets, OpenAI settings, HTTPS URLs, and Twilio
+    credential shape. Full audit/log redaction still needs Phase 1 review.
 12. **Availability** — slots = business hours − holidays − active appointments − buffers,
     computed in org timezone, DST-aware (`evaluators.ts`).
 
@@ -169,8 +168,7 @@ docs/adr/                     # architecture decision records
 | `VELORA_APP_BASE_URL` | `http://localhost:3000` | HTTPS public URL required for production startup |
 | `VELORA_ENCRYPTION_KEY` | dev fallback | AES-256-GCM key for integration creds |
 | `VELORA_SESSION_SECRET` | dev fallback | Session signing + webhook HMAC |
-| `VELORA_VERIFY_WEBHOOKS` | `0` | Set `1` to enforce webhook signatures |
-| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` | _(empty)_ | Reserved for future provider integration; unused by current send path |
+| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` | _(empty)_ | Required at production startup; callback validation uses them, outbound send is still unavailable |
 
 ---
 

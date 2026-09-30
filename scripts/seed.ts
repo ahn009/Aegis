@@ -44,6 +44,11 @@ async function main() {
       encryptedCreds: encrypt(JSON.stringify({ twilioSid: "demo", twilioToken: "demo", crm: "none" })),
     },
   });
+  await db.inboundNumber.upsert({
+    where: { phoneE164: "+12145550100" },
+    update: {},
+    create: { organizationId: org.id, phoneE164: "+12145550100" },
+  });
 
   // Membership (OWNER)
   await db.membership.upsert({

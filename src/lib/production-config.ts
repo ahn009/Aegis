@@ -31,6 +31,12 @@ export function validateProductionConfig(values: Readonly<Record<string, string 
     }
   }
 
-  if (values.VELORA_VERIFY_WEBHOOKS !== "1") errors.push("VELORA_VERIFY_WEBHOOKS must be 1");
+  if (!/^AC[0-9a-fA-F]{32}$/.test(values.TWILIO_ACCOUNT_SID ?? "")) {
+    errors.push("TWILIO_ACCOUNT_SID must be a valid account SID");
+  }
+  const twilioAuthToken = values.TWILIO_AUTH_TOKEN ?? "";
+  if (!/^\S{32,}$/.test(twilioAuthToken) || /demo|example|test|placeholder|change.?me/i.test(twilioAuthToken) || /^(.)\1+$/.test(twilioAuthToken)) {
+    errors.push("TWILIO_AUTH_TOKEN must be configured");
+  }
   if (errors.length) throw new Error(`Invalid production configuration:\n- ${errors.join("\n- ")}`);
 }

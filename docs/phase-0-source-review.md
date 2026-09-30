@@ -26,7 +26,7 @@ Updated: 2026-09-30. This register records the first pass through first-party ap
 | `GET /api/worker/status` | Authenticated; last error message visible to `ADMIN`+ | Queue counts remain visible to signed-in staff |
 | `POST /api/worker/run` | `ADMIN`+, same-origin mutation | P1-01/P1-05: atomic job claim and route-level denial tests |
 | `POST /api/simulate-call/start`, `/turn`; `GET /api/simulate-call/[conversationId]` | Authenticated in development; 404 in production | P1-03: retry safety; simulator must never write production metrics |
-| `POST /api/webhooks/voice`, `/sms`, `/call-status` | Public in development; 503 in production | P0-01/02/03: real provider, signatures, tenant mapping, and callbacks |
+| `POST /api/webhooks/voice`, `/sms`, `/call-status` | Signed Twilio form and mapped number/call required in development; 503 in production | P0-01/02/03: real provider, durable processing and live callback tests |
 
 ## Placeholder disposition
 

@@ -8,7 +8,8 @@ const good = {
   VELORA_AI_PROVIDER: "openai",
   OPENAI_API_KEY: "sk-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
   VELORA_APP_BASE_URL: "https://app.velora.example",
-  VELORA_VERIFY_WEBHOOKS: "1",
+  TWILIO_ACCOUNT_SID: `AC${"a".repeat(32)}`,
+  TWILIO_AUTH_TOKEN: "0123456789abcdefABCDEF0123456789",
 };
 
 describe("production configuration", () => {
@@ -24,7 +25,8 @@ describe("production configuration", () => {
     ["missing API key", { OPENAI_API_KEY: undefined }],
     ["insecure app URL", { VELORA_APP_BASE_URL: "http://localhost:3000" }],
     ["invalid provider URL", { OPENAI_BASE_URL: "http://localhost:1234" }],
-    ["unsigned webhooks", { VELORA_VERIFY_WEBHOOKS: "0" }],
+    ["missing Twilio account", { TWILIO_ACCOUNT_SID: undefined }],
+    ["missing Twilio token", { TWILIO_AUTH_TOKEN: undefined }],
   ])("rejects %s", (_name, override) => {
     expect(() => validateProductionConfig({ ...good, ...override })).toThrow("Invalid production configuration");
   });

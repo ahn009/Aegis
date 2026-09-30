@@ -58,6 +58,7 @@ const TABLES = [
   "Membership",
   "Contact",
   "AiSession",
+  "InboundNumber",
   "User",
   "Organization",
 ];
@@ -108,6 +109,8 @@ async function seedMinimal() {
       ),
     },
   });
+
+  await db.inboundNumber.create({ data: { organizationId: org.id, phoneE164: "+12145550100" } });
 
   await db.membership.create({
     data: { organizationId: org.id, userId: owner.id, role: "OWNER" },
