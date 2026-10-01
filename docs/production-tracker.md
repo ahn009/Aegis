@@ -6,6 +6,8 @@ Updated: 2026-10-01 · Plan: [production-build-plan.md](production-build-plan.md
 
 Phase 0 is **verified**. Phase 1 is **in progress**. The launch target includes live inbound calls, SMS, the dashboard, and AI agents performing daily operations with a trace of every action. OpenAI API is selected. Twilio + paid Render Ohio + managed Postgres is the provisional implementation target in [ADR 0006](adr/0006-production-platform-target.md); provider accounts and deployment remain undecided. The application is **not production ready**.
 
+Phase 1 local session, route, and callback foundations pass clean CI. Its remaining exit evidence depends on a selected staging proxy/provider, customer-data retention decisions, and durable audit work described in [security-data-policy.md](security-data-policy.md). Live webhooks still return 503.
+
 Legend: `open` = not started; `in_progress` = work underway; `pending` = deliberately paused for later continuation; `blocked` = cannot proceed without a named dependency; `verified` = acceptance evidence recorded; `deferred` = explicitly removed from release scope with reason.
 
 | Phase | Status | Exit evidence needed |
@@ -33,7 +35,7 @@ Legend: `open` = not started; `in_progress` = work underway; `pending` = deliber
 | P1-02 | 2 | open | Fix provider schema/history and timeout policy | Provider contract and failure tests |
 | P1-03 | 3 | open | Make turn retry safe after partial writes | Retry test with one set of side effects |
 | P1-04 | 3 | open | Make appointment transitions and reminders durable | Confirmation race and crash tests |
-| P1-05 | 1 | in_progress | Confirm expanded matrix in pushed CI and complete browser check | Same-Origin mutation gate; role denials; contact/call/lead/appointment/rule/simulator tenant reads; appointment/lead/rule mutation isolation; overview/analytics isolation and worker scope tests pass locally |
+| P1-05 | 1 | verified | Preserve the route matrix as new routes are added | Same-Origin mutation gate; role denials; contact/call/lead/appointment/rule/simulator tenant reads; appointment/lead/rule mutation isolation; overview/analytics isolation, worker scope and orchestrator tests pass in [CI run 36877977128](https://github.com/ahn009/Aegis/actions/runs/36877977128) |
 | P1-06 | 1 | in_progress | Verify forwarded-IP behavior and multi-instance admission on the selected staging proxy/database | Atomic shared login counters, unknown/known email parity, opt-in trusted-IP limit, worker cleanup and simultaneous-attempt test pass locally |
 | P1-07 | 6 | pending | Preview Caddy config, websocket examples, and shell tests removed; create environment-neutral staging deploy | Staging deployment and smoke test |
 | P1-08 | 3 | open | Choose DB and write migrations/restore plan | Migration and restore evidence |
@@ -123,10 +125,11 @@ Legend: `open` = not started; `in_progress` = work underway; `pending` = deliber
 | 2026-10-01 | P1-05 route matrix CI [run 36871375442](https://github.com/ahn009/Aegis/actions/runs/36871375442) | Clean install, Prisma generation, typecheck, lint, 56 tests, and production build passed on `a823d67`. This verifies the checkpoint; Phase 1 and release gates remain open. |
 | 2026-10-01 | Phase 1 callback, session, route and login checkpoint | `src/lib/webhook-transaction.ts` commits a signed callback receipt and its local effects together; rollback/replay and minimized SMS receipt tests pass. Organization switch rotates the session token; idle/absolute expiry tests pass. Route matrix covers list, overview, analytics, simulator, appointment, rule and direct orchestrator boundaries. Login uses atomic `LoginCounter` admission before password verification; five simultaneous attempts admit only four, and the public route locks unknown addresses. Audit key redaction expanded. `npm test` 66/66, `npm run typecheck`, `npm run lint`, and `DATABASE_URL=file:/tmp/velora-build.db NEXT_TELEMETRY_DISABLED=1 npm run build` pass. Clean CI pending. `docs/security-data-policy.md` records audit and retention release gaps; versioned database migration remains Phase 3. |
 | 2026-10-01 | P0-07 post-rotation local HTTP check | Isolated SQLite at `/tmp/velora-phase1-browser-*/test.db` seeded with two organizations. Local Next development server: login 200; organization switch 200 with a different cookie; old cookie `/api/auth/me` returns null; new cookie resolves second organization and its private contact. Server stopped. This checks the HTTP cookie boundary after token rotation; the earlier Chrome UI switch check remains valid for visual state clearing. |
+| 2026-10-01 | Phase 1 security checkpoint CI [run 36877977128](https://github.com/ahn009/Aegis/actions/runs/36877977128) | Clean install, Prisma generation, typecheck, lint, 66 isolated tests, and webpack production build passed on `2c8a94a`. P0-07 and P1-05 are verified. Phase 1 remains open for provider/staging verification, approved data retention and deletion, and durable audit outside callbacks. Production webhooks remain 503; no deployment or paid resources were created. |
 
 ## Next steps
 
-1. Complete clean CI for the expanded local matrix and preserve the P0-07 session switch gate.
+1. Preserve the verified P0-07 session and P1-05 route gates while later phases add endpoints.
 2. Confirm or revise the provider/hosting target before accounts or resources are created. Then verify callback behavior, forwarded IP trust, and multi-instance login admission in staging.
 3. Decide customer-data retention/deletion periods and enforce durable audit for every mutation before production release; see [security-data-policy.md](security-data-policy.md). Preserve the Phase 0 gates as later phases change production behavior.
 
