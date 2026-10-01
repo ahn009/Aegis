@@ -1,7 +1,8 @@
 import { db } from "../db";
 import { env } from "../env";
 import { ApiError } from "../errors";
-import { auditAsAiTool, auditInTransaction } from "../audit";
+import { auditInTransaction } from "../audit";
+import type { Prisma } from "@prisma/client";
 import type { BusinessHoursRule, HolidaysRule } from "../rules/schemas";
 import { computeAvailability, evalOpenStatus, toZonedParts } from "../rules/evaluators";
 
@@ -62,6 +63,18 @@ export class OutOfAreaBookingError extends Error {
   }
 }
 
+async function assertAppointmentReferences(tx: Prisma.TransactionClient, input: BookInput): Promise<void> {
+  if (input.contactId && !(await tx.contact.findFirst({ where: { id: input.contactId, organizationId: input.organizationId, deletedAt: null }, select: { id: true } }))) {
+    throw ApiError.notFound("Contact not found");
+  }
+  if (input.leadId && !(await tx.lead.findFirst({ where: { id: input.leadId, organizationId: input.organizationId, deletedAt: null }, select: { id: true } }))) {
+    throw ApiError.notFound("Lead not found");
+  }
+  if (input.callId && !(await tx.call.findFirst({ where: { id: input.callId, organizationId: input.organizationId }, select: { id: true } }))) {
+    throw ApiError.notFound("Call not found");
+  }
+}
+
 /**
  * Book a CONFIRMED appointment with double-booking protection.
  * Throws BookingConflictError on overlap. Exactly one of N concurrent callers wins.
@@ -78,6 +91,7 @@ export async function bookAppointment(input: BookInput): Promise<BookResult> {
 
   // Transactional overlap re-check + insert. SQLite serializes write txns.
   return await db.$transaction(async (tx) => {
+    await assertAppointmentReferences(tx, input);
     const conflict = await tx.appointment.findFirst({
       where: {
         organizationId: input.organizationId,
@@ -105,18 +119,15 @@ export async function bookAppointment(input: BookInput): Promise<BookResult> {
         notes: input.notes ?? null,
       },
     });
-    return appt;
-  }).then(async (appt) => {
-    // Audit (outside tx to avoid blocking)
-    await auditAsAiTool(input.organizationId, "book_appointment", {
-      action: "APPOINTMENT_CREATE",
-      entityType: "Appointment",
-      entityId: appt.id,
+    await auditInTransaction(tx, {
+      organizationId: input.organizationId, actorType: input.actorType ?? "AI_TOOL", actorId: input.actorId ?? "book_appointment",
+      action: "APPOINTMENT_CREATE", entityType: "Appointment", entityId: appt.id,
       after: { status: "CONFIRMED", serviceType: input.serviceType, start: input.startIso, end: input.endIso, contactId: input.contactId },
     });
-    // Queue 24h + 2h reminders via outbox (at-least-once)
-    await queueReminder(input.organizationId, appt.id, start, 24 * 60);
-    await queueReminder(input.organizationId, appt.id, start, 2 * 60);
+    await queueReminder(tx, input.organizationId, appt.id, start, 24 * 60);
+    await queueReminder(tx, input.organizationId, appt.id, start, 2 * 60);
+    return appt;
+  }).then(async (appt) => {
     return {
       appointment: {
         id: appt.id,
@@ -142,6 +153,7 @@ export async function requestAppointment(input: BookInput & { holdUntil?: Date }
   // If a concrete slot is requested, hold it (counts as busy). Otherwise just record.
   if (input.startIso) {
     return await db.$transaction(async (tx) => {
+      await assertAppointmentReferences(tx, input);
       if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end > start) {
         const conflict = await tx.appointment.findFirst({
           where: {
@@ -169,24 +181,20 @@ export async function requestAppointment(input: BookInput & { holdUntil?: Date }
           notes: input.notes ?? null,
         },
       });
-      return appt;
-    }).then(async (appt) => {
-      await auditAsAiTool(input.organizationId, "request_appointment", {
-        action: "APPOINTMENT_REQUEST",
-        entityType: "Appointment",
-        entityId: appt.id,
+      await auditInTransaction(tx, {
+        organizationId: input.organizationId, actorType: input.actorType ?? "AI_TOOL", actorId: input.actorId ?? "request_appointment",
+        action: "APPOINTMENT_REQUEST", entityType: "Appointment", entityId: appt.id,
         after: { status: "REQUESTED", serviceType: input.serviceType, holdUntil: holdUntil.toISOString() },
       });
-      // Queue hold-expiry outbox event (worker releases the slot after TTL)
-      await db.outboxEvent.create({
-        data: {
-          organizationId: input.organizationId,
-          eventType: "HOLD_EXPIRE",
-          payloadJson: JSON.stringify({ appointmentId: appt.id, holdUntil: holdUntil.toISOString() }),
-          processAfter: holdUntil,
-          idempotencyKey: `hold-expire-${appt.id}`,
-        },
-      });
+      await tx.outboxEvent.create({ data: {
+        organizationId: input.organizationId,
+        eventType: "HOLD_EXPIRE",
+        payloadJson: JSON.stringify({ appointmentId: appt.id, holdUntil: holdUntil.toISOString() }),
+        processAfter: holdUntil,
+        idempotencyKey: `hold-expire-${appt.id}`,
+      } });
+      return appt;
+    }).then(async (appt) => {
       return {
         appointment: {
           id: appt.id,
@@ -199,25 +207,28 @@ export async function requestAppointment(input: BookInput & { holdUntil?: Date }
     });
   }
   // No concrete slot — just create a REQUEST record
-  const appt = await db.appointment.create({
-    data: {
-      organizationId: input.organizationId,
-      contactId: input.contactId ?? null,
-      leadId: input.leadId ?? null,
-      callId: input.callId ?? null,
-      serviceType: input.serviceType,
-      startTime: new Date(),
-      endTime: new Date(Date.now() + 60 * 60 * 1000),
-      status: "REQUESTED",
-      holdUntil,
-      notes: input.notes ?? null,
-    },
-  });
-  await auditAsAiTool(input.organizationId, "request_appointment", {
-    action: "APPOINTMENT_REQUEST",
-    entityType: "Appointment",
-    entityId: appt.id,
-    after: { status: "REQUESTED", serviceType: input.serviceType },
+  const appt = await db.$transaction(async (tx) => {
+    await assertAppointmentReferences(tx, input);
+    const created = await tx.appointment.create({
+      data: {
+        organizationId: input.organizationId,
+        contactId: input.contactId ?? null,
+        leadId: input.leadId ?? null,
+        callId: input.callId ?? null,
+        serviceType: input.serviceType,
+        startTime: new Date(),
+        endTime: new Date(Date.now() + 60 * 60 * 1000),
+        status: "REQUESTED",
+        holdUntil,
+        notes: input.notes ?? null,
+      },
+    });
+    await auditInTransaction(tx, {
+      organizationId: input.organizationId, actorType: input.actorType ?? "AI_TOOL", actorId: input.actorId ?? "request_appointment",
+      action: "APPOINTMENT_REQUEST", entityType: "Appointment", entityId: created.id,
+      after: { status: "REQUESTED", serviceType: input.serviceType },
+    });
+    return created;
   });
   return {
     appointment: {
@@ -286,10 +297,10 @@ export async function getAvailability(input: AvailabilityInput) {
 
 // --- Reminders (outbox) ---------------------------------------------------
 
-async function queueReminder(organizationId: string, appointmentId: string, startUtc: Date, minutesBefore: number) {
+async function queueReminder(tx: Prisma.TransactionClient, organizationId: string, appointmentId: string, startUtc: Date, minutesBefore: number) {
   const sendAt = new Date(startUtc.getTime() - minutesBefore * 60 * 1000);
   if (sendAt <= new Date()) return; // skip past reminders
-  await db.outboxEvent.create({
+  await tx.outboxEvent.create({
     data: {
       organizationId,
       eventType: minutesBefore >= 60 ? `REMINDER_${Math.floor(minutesBefore / 60)}H` : "REMINDER_2H",

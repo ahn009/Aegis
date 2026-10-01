@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { db } from "../src/lib/db";
 import { createLead, updateLeadStatus } from "../src/lib/domain/leads";
-import { cancelAppointment, confirmAppointment, releaseExpiredHold } from "../src/lib/domain/appointments";
+import { bookAppointment, cancelAppointment, confirmAppointment, releaseExpiredHold, requestAppointment } from "../src/lib/domain/appointments";
 import { createDraftVersion, publishVersion } from "../src/lib/rules/engine";
 import { upsertContactByPhone } from "../src/lib/domain/contacts";
 
@@ -65,5 +65,23 @@ describe("staff action audit durability", () => {
     const foreign = await db.contact.create({ data: { organizationId: second.id, phoneE164: "+12145550143" } });
     await expect(createLead({ organizationId: first.id, contactId: foreign.id, phoneE164: "+12145550144" })).rejects.toMatchObject({ status: 404 });
     expect(await db.lead.count({ where: { organizationId: first.id, phoneE164: "+12145550144" } })).toBe(0);
+  });
+
+  it("rolls back appointment creation and reminder/hold events on audit failure", async () => {
+    const org = await db.organization.findUniqueOrThrow({ where: { slug: "dfw-velora-hvac" } });
+    const base = { organizationId: org.id, serviceType: "AUDIT_ROLLBACK", startIso: "2027-01-10T12:00:00Z", endIso: "2027-01-10T13:00:00Z" };
+    const beforeOutbox = await db.outboxEvent.count({ where: { organizationId: org.id } });
+    await failAuditDuring(() => bookAppointment(base));
+    await failAuditDuring(() => requestAppointment(base));
+    expect(await db.appointment.count({ where: { organizationId: org.id, serviceType: "AUDIT_ROLLBACK" } })).toBe(0);
+    expect(await db.outboxEvent.count({ where: { organizationId: org.id } })).toBe(beforeOutbox);
+  });
+
+  it("refuses appointment references from another organization", async () => {
+    const first = await db.organization.findUniqueOrThrow({ where: { slug: "dfw-velora-hvac" } });
+    const second = await db.organization.create({ data: { name: "Appointment link tenant", slug: `appointment-link-${Date.now()}` } });
+    const foreign = await db.contact.create({ data: { organizationId: second.id, phoneE164: "+12145550145" } });
+    await expect(bookAppointment({ organizationId: first.id, contactId: foreign.id, serviceType: "REPAIR", startIso: "2027-01-11T12:00:00Z", endIso: "2027-01-11T13:00:00Z" })).rejects.toMatchObject({ status: 404 });
+    expect(await db.appointment.count({ where: { organizationId: first.id, contactId: foreign.id } })).toBe(0);
   });
 });
