@@ -13,6 +13,11 @@ import { GET as workerStatus } from "../src/app/api/worker/status/route";
 import { POST as runWorker } from "../src/app/api/worker/run/route";
 import { GET as contactDetail } from "../src/app/api/contacts/[id]/route";
 import { GET as contactList } from "../src/app/api/contacts/route";
+import { GET as callDetail } from "../src/app/api/calls/[id]/route";
+import { GET as leadDetail } from "../src/app/api/leads/[id]/route";
+import { GET as appointmentDetail } from "../src/app/api/appointments/[id]/detail/route";
+import { PATCH as updateLead } from "../src/app/api/leads/[id]/status/route";
+import { POST as publishRule } from "../src/app/api/rules/[id]/publish/route";
 
 const context = { params: Promise.resolve({ id: "missing-appointment" }) };
 const user = { userId: "test-user", organizationId: "test-organization", email: "user@example.test", name: null };
@@ -119,5 +124,69 @@ describe("contact read tenant boundary", () => {
     const secondDetail = await contactDetail(new NextRequest(`http://localhost:3000/api/contacts/${contact.id}`), detailContext);
     expect(secondDetail.status).toBe(200);
     expect((await secondDetail.json()).data.contact.id).toBe(contact.id);
+  });
+});
+
+describe("staff route permission and tenant matrix", () => {
+  beforeEach(() => getSessionUser.mockReset());
+
+  it("returns 404 for another tenant's call, lead, and appointment details", async () => {
+    const first = await db.organization.findUniqueOrThrow({ where: { slug: "dfw-velora-hvac" } });
+    const second = await db.organization.create({ data: { name: "Detail tenant", slug: `detail-${randomUUID()}` } });
+    const call = await db.call.create({ data: { organizationId: second.id, callSid: randomUUID(), fromPhone: "+12145550101", toPhone: "+12145550102" } });
+    const lead = await db.lead.create({ data: { organizationId: second.id, name: "Private lead", phoneE164: "+12145550103" } });
+    const appointment = await db.appointment.create({ data: { organizationId: second.id, serviceType: "REPAIR", startTime: new Date("2026-11-01T12:00:00Z"), endTime: new Date("2026-11-01T13:00:00Z") } });
+    const routes = [
+      [callDetail, `/api/calls/${call.id}`, call.id],
+      [leadDetail, `/api/leads/${lead.id}`, lead.id],
+      [appointmentDetail, `/api/appointments/${appointment.id}/detail`, appointment.id],
+    ] as const;
+
+    getSessionUser.mockResolvedValue({ ...user, organizationId: first.id, role: "VIEWER" });
+    for (const [handler, path, id] of routes) {
+      expect((await handler(new NextRequest(`http://localhost:3000${path}`), { params: Promise.resolve({ id }) })).status).toBe(404);
+    }
+    getSessionUser.mockResolvedValue({ ...user, organizationId: second.id, role: "VIEWER" });
+    for (const [handler, path, id] of routes) {
+      expect((await handler(new NextRequest(`http://localhost:3000${path}`), { params: Promise.resolve({ id }) })).status).toBe(200);
+    }
+  });
+
+  it("blocks lower roles and cross-tenant lead status writes", async () => {
+    const first = await db.organization.findUniqueOrThrow({ where: { slug: "dfw-velora-hvac" } });
+    const second = await db.organization.create({ data: { name: "Lead tenant", slug: `lead-${randomUUID()}` } });
+    const lead = await db.lead.create({ data: { organizationId: second.id, name: "Private lead", phoneE164: "+12145550104" } });
+    const path = `/api/leads/${lead.id}/status`;
+    const ctx = { params: Promise.resolve({ id: lead.id }) };
+    const patch = () => updateLead(new NextRequest(`http://localhost:3000${path}`, { method: "PATCH", headers: { origin: "http://localhost:3000", "content-type": "application/json" }, body: JSON.stringify({ status: "CONTACTED" }) }), ctx);
+
+    for (const role of ["VIEWER", "TECHNICIAN"]) {
+      getSessionUser.mockResolvedValue({ ...user, organizationId: second.id, role });
+      expect((await patch()).status).toBe(403);
+    }
+    getSessionUser.mockResolvedValue({ ...user, organizationId: first.id, role: "DISPATCHER" });
+    expect((await patch()).status).toBe(404);
+    expect((await db.lead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("NEW");
+    getSessionUser.mockResolvedValue({ ...user, organizationId: second.id, role: "DISPATCHER" });
+    expect((await patch()).status).toBe(200);
+    expect((await db.lead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("CONTACTED");
+  });
+
+  it("blocks lower roles and cross-tenant rule publishing", async () => {
+    const first = await db.organization.findUniqueOrThrow({ where: { slug: "dfw-velora-hvac" } });
+    const second = await db.organization.create({ data: { name: "Rule tenant", slug: `rule-${randomUUID()}` } });
+    const draft = await db.businessRuleVersion.create({ data: { organizationId: second.id, ruleType: "holidays", version: 1, dataJson: "{}" } });
+    const path = `/api/rules/${draft.id}/publish`;
+    const ctx = { params: Promise.resolve({ id: draft.id }) };
+    const post = () => publishRule(request(path), ctx);
+
+    getSessionUser.mockResolvedValue({ ...user, organizationId: second.id, role: "DISPATCHER" });
+    expect((await post()).status).toBe(403);
+    getSessionUser.mockResolvedValue({ ...user, organizationId: first.id, role: "MANAGER" });
+    expect((await post()).status).toBe(404);
+    expect((await db.businessRuleVersion.findUniqueOrThrow({ where: { id: draft.id } })).status).toBe("DRAFT");
+    getSessionUser.mockResolvedValue({ ...user, organizationId: second.id, role: "MANAGER" });
+    expect((await post()).status).toBe(200);
+    expect((await db.businessRuleVersion.findUniqueOrThrow({ where: { id: draft.id } })).status).toBe("PUBLISHED");
   });
 });

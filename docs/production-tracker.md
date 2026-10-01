@@ -1,6 +1,6 @@
 # Production work tracker
 
-Updated: 2026-09-30 · Plan: [production-build-plan.md](production-build-plan.md)
+Updated: 2026-10-01 · Plan: [production-build-plan.md](production-build-plan.md)
 
 ## Current position
 
@@ -33,7 +33,7 @@ Legend: `open` = not started; `in_progress` = work underway; `pending` = deliber
 | P1-02 | 2 | open | Fix provider schema/history and timeout policy | Provider contract and failure tests |
 | P1-03 | 3 | open | Make turn retry safe after partial writes | Retry test with one set of side effects |
 | P1-04 | 3 | open | Make appointment transitions and reminders durable | Confirmation race and crash tests |
-| P1-05 | 1 | in_progress | Finish mutation/read role matrix and cross-tenant route tests | Same-Origin mutation gate; appointment writes DISPATCHER+; audit MANAGER+; worker error text ADMIN+; manual worker run scoped to active org; contact route isolation tests pass |
+| P1-05 | 1 | in_progress | Complete remaining route matrix, including list/analytics reads and simulator paths | Same-Origin mutation gate; appointment writes DISPATCHER+; audit MANAGER+; worker error text ADMIN+; manual worker run scoped to active org; contact, call, lead, appointment detail isolation and lead/rule mutation tests pass |
 | P1-06 | 1 | in_progress | Verify Render forwarded-IP behavior in staging and concurrent/multi-instance limits | Database-backed unknown/known email attempts, opt-in trusted-IP limit, worker cleanup and isolated tests pass |
 | P1-07 | 6 | pending | Preview Caddy config, websocket examples, and shell tests removed; create environment-neutral staging deploy | Staging deployment and smoke test |
 | P1-08 | 3 | open | Choose DB and write migrations/restore plan | Migration and restore evidence |
@@ -119,10 +119,11 @@ Legend: `open` = not started; `in_progress` = work underway; `pending` = deliber
 | 2026-09-30 | Phase 1 local checkpoint | `npm test` 51/51, typecheck, lint, webpack production build, and missing-config standalone exit check pass after browser-origin correction. Local Chrome login, organization switch, and cross-organization contact visibility check pass. CI verification pending push. |
 | 2026-09-30 | Phase 1 browser/startup CI [run 36741295684](https://github.com/ahn009/Aegis/actions/runs/36741295684) | Clean install, Prisma generation, typecheck, lint, tests, and production build passed for `f88fb11`. |
 | 2026-09-30 | P1-05 manual worker and contact route scope | Dashboard-triggered worker run now selects only the active organization's queued jobs; standalone background worker still selects all tenants. Idempotency lookup now includes organization. Isolated tests confirm MANAGER denial, ADMIN run leaves another tenant's event pending, and contact detail/list do not expose another tenant's record. `npm test` 53/53, typecheck, lint, and production build pass; CI pending. Atomic outbox claim remains Phase 3. |
+| 2026-10-01 | P1-05 staff route matrix checkpoint, `tests/api-permissions.test.ts` | Added two-tenant call, lead, and appointment detail checks: foreign IDs return 404 and same-tenant IDs return 200. Added lower-role denial, foreign-tenant denial, unchanged-record checks, and authorized success for lead status and rule publish. Initial fixture failed because required lead phone was omitted; corrected fixture and reran `npm test` 56/56, `npm run typecheck`, `npm run lint`, and `DATABASE_URL=file:/tmp/velora-build.db NEXT_TELEMETRY_DISABLED=1 npm run build` successfully. Pushed CI pending. Remaining P1-05 route matrix and callback retry safety remain open. |
 
 ## Next steps
 
-1. Complete Phase 1 security and tenancy controls, starting with production configuration validation and active-organization session binding.
+1. Complete the remaining Phase 1 route matrix and callback retry safety. Verify forwarded IP and concurrent login limits in staging when a deployment target exists.
 2. Confirm or revise the provider/hosting choice before provider accounts or resources are created.
 3. Preserve the Phase 0 gates as later phases change production behavior.
 
