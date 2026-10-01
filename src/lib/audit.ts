@@ -1,5 +1,6 @@
 import { db } from "./db";
 import type { SessionUser } from "./session";
+import type { Prisma } from "@prisma/client";
 
 export type AuditActorType = "USER" | "AI_TOOL" | "WORKER" | "SYSTEM";
 
@@ -15,14 +16,8 @@ export interface AuditInput {
   reason?: string;
 }
 
-/**
- * Append-only audit hook. SPEC: no UPDATE/DELETE endpoints exist for audit.
- * Every mutation (USER, AI_TOOL, or WORKER) writes exactly one row.
- * Failures are logged but never block the caller — audit must not break a
- * business action, but we DO retry once synchronously to avoid silent drops.
- */
-export async function audit(input: AuditInput): Promise<void> {
-  const row = {
+function auditRow(input: AuditInput) {
+  return {
     organizationId: input.organizationId,
     actorType: input.actorType,
     actorId: input.actorId ?? null,
@@ -33,6 +28,21 @@ export async function audit(input: AuditInput): Promise<void> {
     afterJson: input.after !== undefined ? safeStringify(redactPii(input.after)) : null,
     reason: input.reason ?? null,
   };
+}
+
+/** Write an audit row in the caller's transaction. Failure rolls back the action. */
+export async function auditInTransaction(tx: Prisma.TransactionClient, input: AuditInput): Promise<void> {
+  await tx.auditLog.create({ data: auditRow(input) });
+}
+
+/**
+ * Best-effort audit hook for legacy AI/worker flows. No UPDATE/DELETE endpoints
+ * exist for audit. Failures are logged and retried once, but can still leave a
+ * business action without an audit row. New durable actions should use
+ * auditInTransaction until the remaining flows gain transactional writes.
+ */
+export async function audit(input: AuditInput): Promise<void> {
+  const row = auditRow(input);
   try {
     await db.auditLog.create({ data: row });
   } catch (e) {

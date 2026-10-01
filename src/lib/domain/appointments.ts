@@ -1,7 +1,7 @@
 import { db } from "../db";
 import { env } from "../env";
 import { ApiError } from "../errors";
-import { audit, auditAsAiTool, auditAsWorker } from "../audit";
+import { audit, auditAsAiTool, auditAsWorker, auditInTransaction } from "../audit";
 import type { BusinessHoursRule, HolidaysRule } from "../rules/schemas";
 import { computeAvailability, evalOpenStatus, toZonedParts } from "../rules/evaluators";
 
@@ -302,44 +302,53 @@ async function queueReminder(organizationId: string, appointmentId: string, star
 // --- Confirmation / cancellation -----------------------------------------
 
 export async function confirmAppointment(organizationId: string, appointmentId: string, actorId?: string, actorType: "AI_TOOL" | "USER" = "AI_TOOL"): Promise<void> {
-  const appt = await db.appointment.findFirst({ where: { id: appointmentId, organizationId } });
-  if (!appt) throw new ApiError(404, "Appointment not found");
-  if (appt.status !== "REQUESTED") throw new ApiError(409, "Only REQUESTED appointments can be confirmed");
-  // Re-check overlap before confirming (the hold occupies the slot; confirming keeps it)
-  const conflict = await db.appointment.findFirst({
-    where: {
+  await db.$transaction(async (tx) => {
+    const appt = await tx.appointment.findFirst({ where: { id: appointmentId, organizationId } });
+    if (!appt) throw new ApiError(404, "Appointment not found");
+    if (appt.status !== "REQUESTED") throw new ApiError(409, "Only REQUESTED appointments can be confirmed");
+    // Re-check overlap before confirming (the hold occupies the slot; confirming keeps it)
+    const conflict = await tx.appointment.findFirst({
+      where: {
+        organizationId,
+        id: { not: appointmentId },
+        status: "CONFIRMED",
+        startTime: { lt: appt.endTime },
+        endTime: { gt: appt.startTime },
+      },
+    });
+    if (conflict) throw new BookingConflictError(conflict.id);
+    const updated = await tx.appointment.updateMany({ where: { id: appointmentId, organizationId, status: "REQUESTED" }, data: { status: "CONFIRMED", holdUntil: null } });
+    if (updated.count !== 1) throw ApiError.conflict("Appointment changed; retry confirmation");
+    await auditInTransaction(tx, {
       organizationId,
-      id: { not: appointmentId },
-      status: "CONFIRMED",
-      startTime: { lt: appt.endTime },
-      endTime: { gt: appt.startTime },
-    },
-  });
-  if (conflict) throw new BookingConflictError(conflict.id);
-  await db.appointment.update({ where: { id: appointmentId }, data: { status: "CONFIRMED", holdUntil: null } });
-  await audit({
-    organizationId,
-    actorType,
-    actorId: actorId ?? (actorType === "AI_TOOL" ? "confirm_appointment" : undefined),
-    action: "APPOINTMENT_CONFIRM",
-    entityType: "Appointment",
-    entityId: appointmentId,
-    after: { status: "CONFIRMED" },
+      actorType,
+      actorId: actorId ?? (actorType === "AI_TOOL" ? "confirm_appointment" : undefined),
+      action: "APPOINTMENT_CONFIRM",
+      entityType: "Appointment",
+      entityId: appointmentId,
+      after: { status: "CONFIRMED" },
+    });
   });
 }
 
 export async function cancelAppointment(organizationId: string, appointmentId: string, reason: string, actorId?: string, actorType: "AI_TOOL" | "USER" = "AI_TOOL"): Promise<void> {
-  const appt = await db.appointment.findFirst({ where: { id: appointmentId, organizationId } });
-  if (!appt) throw new ApiError(404, "Appointment not found");
-  await db.appointment.update({ where: { id: appointmentId }, data: { status: "CANCELLED", notes: (appt.notes ?? "") + ` [cancelled: ${reason}]` } });
-  await audit({
-    organizationId,
-    actorType,
-    actorId: actorId ?? (actorType === "AI_TOOL" ? "cancel_appointment" : undefined),
-    action: "APPOINTMENT_CANCEL",
-    entityType: "Appointment",
-    entityId: appointmentId,
-    after: { status: "CANCELLED", reason },
+  await db.$transaction(async (tx) => {
+    const appt = await tx.appointment.findFirst({ where: { id: appointmentId, organizationId } });
+    if (!appt) throw new ApiError(404, "Appointment not found");
+    const updated = await tx.appointment.updateMany({
+      where: { id: appointmentId, organizationId, status: appt.status, notes: appt.notes },
+      data: { status: "CANCELLED", notes: (appt.notes ?? "") + ` [cancelled: ${reason}]` },
+    });
+    if (updated.count !== 1) throw ApiError.conflict("Appointment changed; retry cancellation");
+    await auditInTransaction(tx, {
+      organizationId,
+      actorType,
+      actorId: actorId ?? (actorType === "AI_TOOL" ? "cancel_appointment" : undefined),
+      action: "APPOINTMENT_CANCEL",
+      entityType: "Appointment",
+      entityId: appointmentId,
+      after: { status: "CANCELLED", reason },
+    });
   });
 }
 

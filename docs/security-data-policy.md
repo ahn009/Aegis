@@ -11,7 +11,8 @@ Status: engineering policy for the production build, 2026-10-01. Customer data r
 ## Durability
 
 - A provider callback receipt is committed in the same database transaction as its local business changes. A failed transaction leaves no receipt so retry can work; a committed receipt is deduplicated. Provider sends and other external effects require their own idempotency boundary in Phases 2–3.
-- The generic `audit()` hook is currently best effort and can swallow two write failures. User mutations outside the callback transaction can therefore commit without an audit row. Production release requires transactional audit or a durable outbox for those mutations, plus reconciliation tests (P1-03/P1-04/P1-01). Do not claim a complete action history before that gate passes.
+- Staff lead status, appointment confirmation/cancellation, and rule draft/publish writes commit with their audit row in one transaction. An audit failure rolls back the business change; isolated failure-injection tests cover these paths.
+- The generic `audit()` hook remains best effort and can swallow two write failures. AI, worker, contact, and some appointment creation paths still use it after their business changes. Production release requires transactional audit or a durable outbox for those paths, plus reconciliation tests (P1-03/P1-04/P1-01). Do not claim a complete action history before that gate passes.
 - Audit writers redact keys that indicate phone, email, address, token, password, secret, or credentials; rule draft audits use the same redaction. This is key-based minimization, so free-text fields can still contain personal data. Route roles restrict audit reads, while database operator access remains governed by the eventual hosting configuration.
 
 ## Retention and deletion

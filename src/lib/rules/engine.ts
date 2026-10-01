@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { validateRule, type AnyRule, type RuleType } from "./schemas";
-import { redactPii } from "../audit";
+import { auditInTransaction } from "../audit";
 
 // ============================================================================
 // Versioned business-rule evaluation engine.
@@ -78,35 +78,34 @@ export async function createDraftVersion(
   actorId?: string,
 ): Promise<{ id: string; version: number }> {
   const validated = validateRule(ruleType, data);
-  const last = await db.businessRuleVersion.findFirst({
-    where: { organizationId, ruleType },
-    orderBy: { version: "desc" },
-    select: { version: true },
-  });
-  const version = (last?.version ?? 0) + 1;
-  const row = await db.businessRuleVersion.create({
-    data: {
-      organizationId,
-      ruleType,
-      version,
-      status: "DRAFT",
-      dataJson: JSON.stringify(validated),
-      effectiveAt: new Date(),
-    },
-  });
-  // audit
-  await db.auditLog.create({
-    data: {
+  return db.$transaction(async (tx) => {
+    const last = await tx.businessRuleVersion.findFirst({
+      where: { organizationId, ruleType },
+      orderBy: { version: "desc" },
+      select: { version: true },
+    });
+    const version = (last?.version ?? 0) + 1;
+    const row = await tx.businessRuleVersion.create({
+      data: {
+        organizationId,
+        ruleType,
+        version,
+        status: "DRAFT",
+        dataJson: JSON.stringify(validated),
+        effectiveAt: new Date(),
+      },
+    });
+    await auditInTransaction(tx, {
       organizationId,
       actorType: actorId ? "USER" : "SYSTEM",
-      actorId: actorId ?? null,
+      actorId,
       action: "RULE_DRAFT_CREATE",
       entityType: "BusinessRuleVersion",
       entityId: row.id,
-      afterJson: JSON.stringify(redactPii({ ruleType, version, data: validated })),
-    },
+      after: { ruleType, version, data: validated },
+    });
+    return { id: row.id, version };
   });
-  return { id: row.id, version };
 }
 
 export async function publishVersion(
@@ -122,23 +121,24 @@ export async function publishVersion(
   // published rows.) We do set the prior version to ARCHIVED only when a newer
   // one is explicitly published, but retrieval always uses the latest
   // effectiveAt <= now among PUBLISHED rows.
-  const row = await db.businessRuleVersion.findFirst({
-    where: { organizationId, ruleType, version, status: "DRAFT" },
-  });
-  if (!row) throw new Error("DRAFT version not found");
-  await db.businessRuleVersion.update({
-    where: { id: row.id },
-    data: { status: "PUBLISHED", publishedAt: new Date(), effectiveAt, updatedAt: new Date() },
-  });
-  await db.auditLog.create({
-    data: {
+  await db.$transaction(async (tx) => {
+    const row = await tx.businessRuleVersion.findFirst({
+      where: { organizationId, ruleType, version, status: "DRAFT" },
+    });
+    if (!row) throw new Error("DRAFT version not found");
+    const updated = await tx.businessRuleVersion.updateMany({
+      where: { id: row.id, organizationId, status: "DRAFT" },
+      data: { status: "PUBLISHED", publishedAt: new Date(), effectiveAt, updatedAt: new Date() },
+    });
+    if (updated.count !== 1) throw new Error("DRAFT version changed");
+    await auditInTransaction(tx, {
       organizationId,
       actorType: actorId ? "USER" : "SYSTEM",
-      actorId: actorId ?? null,
+      actorId,
       action: "RULE_PUBLISH",
       entityType: "BusinessRuleVersion",
       entityId: row.id,
-      afterJson: JSON.stringify({ ruleType, version, effectiveAt }),
-    },
+      after: { ruleType, version, effectiveAt },
+    });
   });
 }

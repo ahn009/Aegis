@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { audit, auditAsAiTool } from "../audit";
+import { auditAsAiTool, auditInTransaction } from "../audit";
 import { normalizePhone } from "../phone";
 import { ApiError } from "../errors";
 
@@ -86,22 +86,24 @@ export async function updateLeadStatus(
   if (!LEAD_STATUSES.includes(status)) {
     throw new ApiError(422, `Invalid lead status. Allowed: ${LEAD_STATUSES.join(", ")}`, "VALIDATION");
   }
-  const lead = await db.lead.findFirst({ where: { id: leadId, organizationId, deletedAt: null } });
-  if (!lead) throw new ApiError(404, "Lead not found", "NOT_FOUND");
-  if (lead.status === status) return { id: lead.id, status };
-  const before = { status: lead.status };
-  await db.lead.update({ where: { id: leadId }, data: { status } });
-  await audit({
-    organizationId,
-    actorType: "USER",
-    actorId: actorId ?? undefined,
-    action: "LEAD_STATUS_UPDATE",
-    entityType: "Lead",
-    entityId: leadId,
-    before,
-    after: { status },
+  return db.$transaction(async (tx) => {
+    const lead = await tx.lead.findFirst({ where: { id: leadId, organizationId, deletedAt: null } });
+    if (!lead) throw new ApiError(404, "Lead not found", "NOT_FOUND");
+    if (lead.status === status) return { id: lead.id, status };
+    const updated = await tx.lead.updateMany({ where: { id: leadId, organizationId, deletedAt: null, status: lead.status }, data: { status } });
+    if (updated.count !== 1) throw ApiError.conflict("Lead changed; retry status update");
+    await auditInTransaction(tx, {
+      organizationId,
+      actorType: "USER",
+      actorId: actorId ?? undefined,
+      action: "LEAD_STATUS_UPDATE",
+      entityType: "Lead",
+      entityId: leadId,
+      before: { status: lead.status },
+      after: { status },
+    });
+    return { id: leadId, status };
   });
-  return { id: leadId, status };
 }
 
 export async function getLead(organizationId: string, leadId: string) {
