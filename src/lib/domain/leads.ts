@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { auditAsAiTool, auditInTransaction } from "../audit";
+import { auditInTransaction } from "../audit";
 import { normalizePhone } from "../phone";
 import { ApiError } from "../errors";
 
@@ -30,36 +30,40 @@ export interface CreateLeadInput {
 export async function createLead(input: CreateLeadInput) {
   const phone = normalizePhone(input.phoneE164);
   if (!phone) throw new Error("Invalid phone for lead");
-  // Link contact if not provided
-  let contactId = input.contactId;
-  if (!contactId) {
-    const c = await db.contact.findUnique({
-      where: { organizationId_phoneE164: { organizationId: input.organizationId, phoneE164: phone } },
+  return db.$transaction(async (tx) => {
+    // Link contact if not provided
+    let contactId = input.contactId;
+    if (contactId) {
+      const owned = await tx.contact.findFirst({ where: { id: contactId, organizationId: input.organizationId, deletedAt: null } });
+      if (!owned) throw ApiError.notFound("Contact not found");
+    } else {
+      const c = await tx.contact.findUnique({
+        where: { organizationId_phoneE164: { organizationId: input.organizationId, phoneE164: phone } },
+      });
+      contactId = c?.id;
+    }
+    const lead = await tx.lead.create({
+      data: {
+        organizationId: input.organizationId,
+        contactId: contactId ?? null,
+        phoneE164: phone,
+        name: input.name ?? null,
+        serviceType: input.serviceType ?? null,
+        serviceAddressZip: input.serviceAddressZip ?? null,
+        urgency: input.urgency ?? "ROUTINE",
+        inServiceArea: input.inServiceArea ?? null,
+        source: input.source ?? "CALL",
+        status: "NEW",
+        notes: input.notes ?? null,
+      },
     });
-    contactId = c?.id;
-  }
-  const lead = await db.lead.create({
-    data: {
-      organizationId: input.organizationId,
-      contactId: contactId ?? null,
-      phoneE164: phone,
-      name: input.name ?? null,
-      serviceType: input.serviceType ?? null,
-      serviceAddressZip: input.serviceAddressZip ?? null,
-      urgency: input.urgency ?? "ROUTINE",
-      inServiceArea: input.inServiceArea ?? null,
-      source: input.source ?? "CALL",
-      status: "NEW",
-      notes: input.notes ?? null,
-    },
+    await auditInTransaction(tx, {
+      organizationId: input.organizationId, actorType: "AI_TOOL", actorId: "create_lead",
+      action: "LEAD_CREATE", entityType: "Lead", entityId: lead.id,
+      after: { phoneE164: phone, serviceType: input.serviceType, urgency: input.urgency, inServiceArea: input.inServiceArea },
+    });
+    return lead;
   });
-  await auditAsAiTool(input.organizationId, "create_lead", {
-    action: "LEAD_CREATE",
-    entityType: "Lead",
-    entityId: lead.id,
-    after: { phoneE164: phone, serviceType: input.serviceType, urgency: input.urgency, inServiceArea: input.inServiceArea },
-  });
-  return lead;
 }
 
 export async function listLeads(organizationId: string, opts: { status?: string; limit?: number; offset?: number } = {}) {

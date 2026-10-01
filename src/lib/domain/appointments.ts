@@ -1,7 +1,7 @@
 import { db } from "../db";
 import { env } from "../env";
 import { ApiError } from "../errors";
-import { audit, auditAsAiTool, auditAsWorker, auditInTransaction } from "../audit";
+import { auditAsAiTool, auditInTransaction } from "../audit";
 import type { BusinessHoursRule, HolidaysRule } from "../rules/schemas";
 import { computeAvailability, evalOpenStatus, toZonedParts } from "../rules/evaluators";
 
@@ -235,19 +235,20 @@ export async function requestAppointment(input: BookInput & { holdUntil?: Date }
  * Sets status=CANCELLED so the slot frees for the overlap re-check.
  */
 export async function releaseExpiredHold(organizationId: string, appointmentId: string): Promise<void> {
-  const appt = await db.appointment.findFirst({ where: { id: appointmentId, organizationId } });
-  if (!appt) return;
-  if (appt.status !== "REQUESTED") return;
-  if (appt.holdUntil && appt.holdUntil > new Date()) return; // not yet expired
-  await db.appointment.update({
-    where: { id: appointmentId },
-    data: { status: "CANCELLED", notes: (appt.notes ?? "") + " [hold expired]" },
-  });
-  await auditAsWorker(organizationId, "hold-expiry-worker", {
-    action: "APPOINTMENT_HOLD_EXPIRED",
-    entityType: "Appointment",
-    entityId: appointmentId,
-    after: { status: "CANCELLED" },
+  await db.$transaction(async (tx) => {
+    const appt = await tx.appointment.findFirst({ where: { id: appointmentId, organizationId } });
+    if (!appt || appt.status !== "REQUESTED") return;
+    if (appt.holdUntil && appt.holdUntil > new Date()) return;
+    const updated = await tx.appointment.updateMany({
+      where: { id: appointmentId, organizationId, status: "REQUESTED", holdUntil: appt.holdUntil },
+      data: { status: "CANCELLED", notes: (appt.notes ?? "") + " [hold expired]" },
+    });
+    if (updated.count !== 1) return;
+    await auditInTransaction(tx, {
+      organizationId, actorType: "WORKER", actorId: "hold-expiry-worker",
+      action: "APPOINTMENT_HOLD_EXPIRED", entityType: "Appointment", entityId: appointmentId,
+      after: { status: "CANCELLED" },
+    });
   });
 }
 

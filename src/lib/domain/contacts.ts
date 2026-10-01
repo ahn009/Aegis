@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { ApiError } from "../errors";
-import { auditAsAiTool } from "../audit";
+import { auditInTransaction } from "../audit";
 import { isValidE164, normalizePhone } from "../phone";
 
 // ============================================================================
@@ -34,10 +34,11 @@ export async function upsertContactByPhone(input: UpsertContactInput): Promise<U
   if (!phone || !isValidE164(phone)) {
     throw new ApiError(422, "Invalid callback number", "VALIDATION");
   }
-  const existing = await db.contact.findUnique({
-    where: { organizationId_phoneE164: { organizationId: input.organizationId, phoneE164: phone } },
-  });
-  if (existing) {
+  return db.$transaction(async (tx) => {
+    const existing = await tx.contact.findUnique({
+      where: { organizationId_phoneE164: { organizationId: input.organizationId, phoneE164: phone } },
+    });
+    if (existing) {
     // Merge: only fill in fields that are currently null AND the AI provided.
     // AI never overwrites a non-null field with null, and never touches
     // organizationId/id/externalCrmId (not accepted in input).
@@ -51,36 +52,34 @@ export async function upsertContactByPhone(input: UpsertContactInput): Promise<U
     if (Object.keys(data).length === 0) {
       return { id: existing.id, phoneE164: existing.phoneE164, name: existing.name, created: false };
     }
-    const updated = await db.contact.update({ where: { id: existing.id }, data });
-    await auditAsAiTool(input.organizationId, "create_or_update_contact", {
-      action: "CONTACT_UPDATE",
-      entityType: "Contact",
-      entityId: existing.id,
-      before: { name: existing.name, email: existing.email, addressZip: existing.addressZip },
-      after: data,
+      const updated = await tx.contact.update({ where: { id: existing.id, organizationId: input.organizationId }, data });
+      await auditInTransaction(tx, {
+        organizationId: input.organizationId, actorType: "AI_TOOL", actorId: "create_or_update_contact",
+        action: "CONTACT_UPDATE", entityType: "Contact", entityId: existing.id,
+        before: { name: existing.name, email: existing.email, addressZip: existing.addressZip }, after: data,
+      });
+      return { id: updated.id, phoneE164: updated.phoneE164, name: updated.name, created: false };
+    }
+    const created = await tx.contact.create({
+      data: {
+        organizationId: input.organizationId,
+        phoneE164: phone,
+        name: input.name ?? null,
+        email: input.email ?? null,
+        addressStreet: input.addressStreet ?? null,
+        addressCity: input.addressCity ?? null,
+        addressState: input.addressState ?? null,
+        addressZip: input.addressZip ?? null,
+        notes: input.notes ?? null,
+      },
     });
-    return { id: updated.id, phoneE164: updated.phoneE164, name: updated.name, created: false };
-  }
-  const created = await db.contact.create({
-    data: {
-      organizationId: input.organizationId,
-      phoneE164: phone,
-      name: input.name ?? null,
-      email: input.email ?? null,
-      addressStreet: input.addressStreet ?? null,
-      addressCity: input.addressCity ?? null,
-      addressState: input.addressState ?? null,
-      addressZip: input.addressZip ?? null,
-      notes: input.notes ?? null,
-    },
+    await auditInTransaction(tx, {
+      organizationId: input.organizationId, actorType: "AI_TOOL", actorId: "create_or_update_contact",
+      action: "CONTACT_CREATE", entityType: "Contact", entityId: created.id,
+      after: { phoneE164: phone, name: input.name ?? null },
+    });
+    return { id: created.id, phoneE164: created.phoneE164, name: created.name, created: true };
   });
-  await auditAsAiTool(input.organizationId, "create_or_update_contact", {
-    action: "CONTACT_CREATE",
-    entityType: "Contact",
-    entityId: created.id,
-    after: { phoneE164: phone, name: input.name ?? null },
-  });
-  return { id: created.id, phoneE164: created.phoneE164, name: created.name, created: true };
 }
 
 export async function findContactByPhone(organizationId: string, phoneE164: string) {
