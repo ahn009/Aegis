@@ -2,6 +2,8 @@ import { db } from "../db";
 import { auditAsWorker } from "../audit";
 import { normalizePhone, isValidE164 } from "../phone";
 import { ApiError } from "../errors";
+import type { Prisma } from "@prisma/client";
+import { redactPii } from "../audit";
 
 // ============================================================================
 // SMS messaging service. SPEC HARD CONSTRAINT:
@@ -14,41 +16,41 @@ const STOP_KEYWORDS = ["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"
 const START_KEYWORDS = ["START", "YES", "UNSTOP"];
 
 /** Inbound SMS handler. Detects STOP/START and toggles suppression. */
-export async function handleInboundSms(organizationId: string, fromPhone: string, body: string): Promise<{ suppressed: boolean; replied: boolean }> {
+export async function handleInboundSms(organizationId: string, fromPhone: string, body: string, client: Prisma.TransactionClient = db): Promise<{ suppressed: boolean; replied: boolean }> {
   const phone = normalizePhone(fromPhone);
   if (!phone || !isValidE164(phone)) return { suppressed: false, replied: false };
   const upper = body.trim().toUpperCase();
   // Persist inbound
-  await db.smsMessage.create({
+  await client.smsMessage.create({
     data: { organizationId, toPhone: phone, fromPhone: phone, body, direction: "INBOUND", status: "DELIVERED" },
   });
 
   if (STOP_KEYWORDS.includes(upper)) {
     // Immediate org-scoped suppression
-    await db.smsOptOut.upsert({
+    await client.smsOptOut.upsert({
       where: { organizationId_phoneE164: { organizationId, phoneE164: phone } },
       create: { organizationId, phoneE164: phone, reason: "STOP" },
       update: { reason: "STOP" },
     });
-    await auditAsWorker(organizationId, "sms-inbound", {
+    await auditSms(organizationId, "sms-inbound", {
       action: "SMS_OPT_OUT",
       entityType: "SmsOptOut",
       entityId: phone,
       after: { phoneE164: phone, reason: "STOP" },
-    });
+    }, client);
     // Auto-acknowledge per carrier best practices
-    await sendSmsInternal(organizationId, phone, "You have been unsubscribed. Reply START to opt back in.", "OPTOUT_ACK");
+    await sendSmsInternal(organizationId, phone, "You have been unsubscribed. Reply START to opt back in.", "OPTOUT_ACK", client);
     return { suppressed: true, replied: true };
   }
   if (START_KEYWORDS.includes(upper)) {
-    await db.smsOptOut.deleteMany({ where: { organizationId, phoneE164: phone } }).catch(() => {});
-    await auditAsWorker(organizationId, "sms-inbound", {
+    await client.smsOptOut.deleteMany({ where: { organizationId, phoneE164: phone } });
+    await auditSms(organizationId, "sms-inbound", {
       action: "SMS_OPT_IN",
       entityType: "SmsOptOut",
       entityId: phone,
       after: { phoneE164: phone, optIn: true },
-    });
-    await sendSmsInternal(organizationId, phone, "You have been re-subscribed. Reply STOP to opt out.", "OPTIN_ACK");
+    }, client);
+    await sendSmsInternal(organizationId, phone, "You have been re-subscribed. Reply STOP to opt out.", "OPTIN_ACK", client);
     return { suppressed: false, replied: true };
   }
   return { suppressed: false, replied: false };
@@ -97,22 +99,36 @@ export async function sendSms(
   return sendSmsInternal(organizationId, phone, body, templateKey);
 }
 
-async function sendSmsInternal(organizationId: string, phone: string, body: string, templateKey?: string) {
+async function sendSmsInternal(organizationId: string, phone: string, body: string, templateKey?: string, client: Prisma.TransactionClient = db) {
   if (process.env.NODE_ENV === "production") {
     throw new ApiError(503, "SMS provider is not configured", "SERVICE_UNAVAILABLE");
   }
   // Real Twilio call would go here. In this build (no Twilio creds), we record
   // the message as SENT. The outbox + worker pattern would retry on failure.
-  const msg = await db.smsMessage.create({
+  const msg = await client.smsMessage.create({
     data: { organizationId, toPhone: phone, fromPhone: null, body, direction: "OUTBOUND", templateKey, status: "SENT" },
   });
-  await auditAsWorker(organizationId, "sms-sender", {
+  await auditSms(organizationId, "sms-sender", {
     action: "SMS_SEND",
     entityType: "SmsMessage",
     entityId: msg.id,
     after: { toPhone: phone, templateKey, status: "SENT" },
-  });
+  }, client);
   return { status: "SENT" as const, messageId: msg.id };
+}
+
+async function auditSms(
+  organizationId: string,
+  actorId: string,
+  input: { action: string; entityType: string; entityId: string; after: unknown },
+  client: Prisma.TransactionClient,
+) {
+  if (client === db) return auditAsWorker(organizationId, actorId, input);
+  await client.auditLog.create({ data: {
+    organizationId, actorType: "WORKER", actorId,
+    action: input.action, entityType: input.entityType, entityId: input.entityId,
+    afterJson: JSON.stringify(redactPii(input.after)),
+  } });
 }
 
 /**

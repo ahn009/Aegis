@@ -1,7 +1,6 @@
 import { NextRequest } from "next/server";
-import { Prisma } from "@prisma/client";
 import { z } from "zod";
-import { db } from "@/lib/db";
+import { processTwilioWebhook } from "@/lib/webhook-transaction";
 import { handleInboundSms } from "@/lib/domain/messaging";
 import { ok, errorBody, ApiError } from "@/lib/errors";
 import { parseVerifiedTwilioForm, resolveTwilioOrganization } from "@/lib/webhook-security";
@@ -27,26 +26,11 @@ export async function POST(req: NextRequest) {
     if (!fromPhone) throw ApiError.badRequest("Invalid sender number");
     const orgId = await resolveTwilioOrganization(parsed.To);
 
-    // Dedup on (provider=sms, externalId=MessageSid)
-    try {
-      await db.webhookEvent.create({
-        data: {
-          organizationId: orgId,
-          provider: "twilio",
-          externalId: parsed.MessageSid,
-          event: "inbound",
-          payloadJson: JSON.stringify({ MessageSid: parsed.MessageSid, To: parsed.To }),
-          signatureValid: true,
-        },
-      });
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        return Response.json(ok({ deduped: true }));
-      }
-      throw error;
-    }
-
-    await handleInboundSms(orgId, fromPhone, parsed.Body);
+    const processed = await processTwilioWebhook(
+      { organizationId: orgId, externalId: parsed.MessageSid, event: "inbound", payload: { MessageSid: parsed.MessageSid, To: parsed.To } },
+      (tx) => handleInboundSms(orgId, fromPhone, parsed.Body, tx),
+    );
+    if (processed.deduped) return Response.json(ok({ deduped: true }));
 
     return Response.json(ok({ received: true }));
   } catch (err) {

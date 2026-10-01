@@ -2,6 +2,8 @@ import { db } from "../db";
 import { ApiError } from "../errors";
 import { auditAsWorker } from "../audit";
 import { normalizePhone } from "../phone";
+import type { Prisma } from "@prisma/client";
+import { redactPii } from "../audit";
 
 // ============================================================================
 // Call + conversation service. SPEC §4 (voice infra) + §20 (state machine).
@@ -17,11 +19,11 @@ export interface InboundCallInput {
   toPhone: string;
 }
 
-export async function startInboundCall(input: InboundCallInput) {
+export async function startInboundCall(input: InboundCallInput, client: Prisma.TransactionClient = db) {
   const fromPhone = normalizePhone(input.fromPhone);
   if (!fromPhone) throw new ApiError(422, "Invalid from phone", "VALIDATION");
   // Dedup on CallSid (SPEC: webhooks dedup on (provider, CallSid + event))
-  const existing = await db.call.findUnique({ where: { callSid: input.callSid }, include: { conversation: true } });
+  const existing = await client.call.findUnique({ where: { callSid: input.callSid }, include: { conversation: true } });
   if (existing) {
     if (existing.organizationId !== input.organizationId || !existing.conversation) {
       throw new ApiError(409, "Call cannot be resumed", "CONFLICT");
@@ -29,10 +31,10 @@ export async function startInboundCall(input: InboundCallInput) {
     return { call: existing, conversation: existing.conversation, deduped: true };
   }
   // Link contact if exists
-  const contact = await db.contact.findUnique({
+  const contact = await client.contact.findUnique({
     where: { organizationId_phoneE164: { organizationId: input.organizationId, phoneE164: fromPhone } },
   });
-  const call = await db.call.create({
+  const call = await client.call.create({
     data: {
       organizationId: input.organizationId,
       contactId: contact?.id ?? null,
@@ -44,30 +46,36 @@ export async function startInboundCall(input: InboundCallInput) {
       urgency: "ROUTINE",
     },
   });
-  const conversation = await db.conversation.create({
+  const conversation = await client.conversation.create({
     data: {
       organizationId: input.organizationId,
       callId: call.id,
       state: "GREETING",
     },
   });
-  await auditAsWorker(input.organizationId, "voice-gateway", {
-    action: "CALL_START",
-    entityType: "Call",
-    entityId: call.id,
-    after: { callSid: input.callSid, fromPhone, contactId: contact?.id ?? null },
-  });
+  if (client === db) {
+    await auditAsWorker(input.organizationId, "voice-gateway", {
+      action: "CALL_START", entityType: "Call", entityId: call.id,
+      after: { callSid: input.callSid, fromPhone, contactId: contact?.id ?? null },
+    });
+  } else {
+    await client.auditLog.create({ data: {
+      organizationId: input.organizationId, actorType: "WORKER", actorId: "voice-gateway",
+      action: "CALL_START", entityType: "Call", entityId: call.id,
+      afterJson: JSON.stringify(redactPii({ callSid: input.callSid, fromPhone, contactId: contact?.id ?? null })),
+    } });
+  }
   return { call, conversation, deduped: false };
 }
 
-export async function endCall(organizationId: string, callId: string, status: string, outcome?: string) {
-  await db.call.update({
-    where: { id: callId },
+export async function endCall(organizationId: string, callId: string, status: string, outcome?: string, client: Prisma.TransactionClient = db) {
+  await client.call.update({
+    where: { id: callId, organizationId },
     data: { status, endedAt: new Date() },
   });
   if (outcome) {
-    await db.conversation.updateMany({
-      where: { callId },
+    await client.conversation.updateMany({
+      where: { callId, organizationId },
       data: { outcome, state: "END" },
     });
   }
@@ -106,7 +114,8 @@ export async function recordTurn(input: {
 }
 
 export async function updateConversationState(conversationId: string, state: string, organizationId: string) {
-  await db.conversation.update({ where: { id: conversationId }, data: { state } });
+  const updated = await db.conversation.updateMany({ where: { id: conversationId, organizationId }, data: { state } });
+  if (updated.count !== 1) throw ApiError.notFound("Conversation not found");
 }
 
 export async function getConversationForOrg(organizationId: string, conversationId: string) {

@@ -1,9 +1,9 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { verifyPassword } from "@/lib/password";
+import { hashPassword, verifyPassword } from "@/lib/password";
 import { createSession, setSessionCookie } from "@/lib/session";
-import { checkLockout, recordFailedLogin, recordSuccessfulLogin, assertLockout } from "@/lib/rate-limit";
+import { consumeLoginAttempt, recordSuccessfulLogin, assertLockout } from "@/lib/rate-limit";
 import { ok, errorBody } from "@/lib/errors";
 import { withPublicApi, parseBody, getClientIp } from "@/lib/http";
 
@@ -13,33 +13,31 @@ const LoginSchema = z.object({
   organizationId: z.string().min(1).optional(),
 });
 
+const dummyPasswordHash = hashPassword("no-account-password-verification");
+
 export const POST = withPublicApi(async (req) => {
   try {
     const { email, password, organizationId } = await parseBody(req, LoginSchema);
     const clientIp = getClientIp(req);
 
-    // 1. Lockout check (don't reveal whether email exists)
-    const lockout = await checkLockout(email, clientIp);
+    // Reserve before checking credentials so concurrent workers share the limit.
+    const lockout = await consumeLoginAttempt(email, clientIp);
     assertLockout(lockout);
 
     const user = await db.user.findUnique({
       where: { email: email.toLowerCase() },
       include: { memberships: true },
     });
-    // Constant-ish timing: always verify a hash
-    const valid = user ? verifyPassword(password, user.passwordHash) : false;
+    // Verify a hash even for unknown addresses to reduce account enumeration by timing.
+    const valid = verifyPassword(password, user?.passwordHash ?? dummyPasswordHash);
 
     if (!user || !valid || user.memberships.length === 0) {
-      const res = await recordFailedLogin(email, clientIp);
-      // If now locked, surface that
-      if (!res.ok) assertLockout(res);
       return Response.json(
         { ok: false, error: { code: "UNAUTHORIZED", message: "Invalid email or password" } },
         { status: 401 },
       );
     }
 
-    await recordSuccessfulLogin(email);
     const membership = organizationId
       ? user.memberships.find((item) => item.organizationId === organizationId)
       : user.memberships.toSorted((a, b) => a.organizationId.localeCompare(b.organizationId))[0];
@@ -51,6 +49,7 @@ export const POST = withPublicApi(async (req) => {
       ip: clientIp,
       userAgent: req.headers.get("user-agent") ?? undefined,
     });
+    await recordSuccessfulLogin(email);
     await setSessionCookie(token);
 
     return Response.json(ok({

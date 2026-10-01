@@ -1,5 +1,6 @@
 import { db } from "../db";
 import { validateRule, type AnyRule, type RuleType } from "./schemas";
+import { redactPii } from "../audit";
 
 // ============================================================================
 // Versioned business-rule evaluation engine.
@@ -102,7 +103,7 @@ export async function createDraftVersion(
       action: "RULE_DRAFT_CREATE",
       entityType: "BusinessRuleVersion",
       entityId: row.id,
-      afterJson: JSON.stringify({ ruleType, version, data: validated }),
+      afterJson: JSON.stringify(redactPii({ ruleType, version, data: validated })),
     },
   });
   return { id: row.id, version };

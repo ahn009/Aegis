@@ -1,7 +1,6 @@
 import { NextRequest } from "next/server";
-import { Prisma } from "@prisma/client";
-import { db } from "@/lib/db";
 import { startInboundCall } from "@/lib/domain/calls";
+import { processTwilioWebhook } from "@/lib/webhook-transaction";
 import { normalizePhone } from "@/lib/phone";
 import { parseVerifiedTwilioForm, resolveTwilioOrganization } from "@/lib/webhook-security";
 import { ok, errorBody, ApiError } from "@/lib/errors";
@@ -24,19 +23,12 @@ export async function POST(req: NextRequest) {
     if (!callSid || !fromPhone || !toPhone) throw ApiError.badRequest("Missing call ID or phone number");
     const orgId = await resolveTwilioOrganization(toPhone);
 
-    // Dedup on (twilio, CallSid)
-    try {
-      await db.webhookEvent.create({
-        data: { organizationId: orgId, provider: "twilio", externalId: callSid, event: "voice", payloadJson: JSON.stringify({ CallSid: callSid, To: toPhone }), signatureValid: true },
-      });
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        return Response.json(ok({ deduped: true, callSid }));
-      }
-      throw error;
-    }
-
-    const result = await startInboundCall({ organizationId: orgId, callSid, fromPhone, toPhone });
+    const processed = await processTwilioWebhook(
+      { organizationId: orgId, externalId: callSid, event: "voice", payload: { CallSid: callSid, To: toPhone } },
+      (tx) => startInboundCall({ organizationId: orgId, callSid, fromPhone, toPhone }, tx),
+    );
+    if (processed.deduped) return Response.json(ok({ deduped: true, callSid }));
+    const result = processed.result;
 
     // TwiML-ish response (JSON form for the simulator)
     return Response.json(ok({

@@ -122,22 +122,25 @@ export async function getSessionUserForToken(token: string): Promise<SessionUser
 export async function switchSessionOrganization(organizationId: string): Promise<SessionUser> {
   const token = await readSessionCookie();
   if (!token) throw ApiError.unauthorized();
-  return switchSessionOrganizationForToken(token, organizationId);
+  const { token: nextToken, ...user } = await switchSessionOrganizationForToken(token, organizationId);
+  await setSessionCookie(nextToken);
+  return user;
 }
 
-export async function switchSessionOrganizationForToken(token: string, organizationId: string): Promise<SessionUser> {
+export async function switchSessionOrganizationForToken(token: string, organizationId: string): Promise<SessionUser & { token: string }> {
   const current = await getSessionUserForToken(token);
   if (!current) throw ApiError.unauthorized();
   const membership = await db.membership.findUnique({
     where: { organizationId_userId: { organizationId, userId: current.userId } },
   });
   if (!membership) throw ApiError.notFound();
+  const nextToken = randomToken(32);
   const updated = await db.session.updateMany({
     where: { tokenHash: hashToken(token), userId: current.userId, activeOrganizationId: current.organizationId },
-    data: { activeOrganizationId: organizationId, csrfToken: randomToken(16) },
+    data: { activeOrganizationId: organizationId, tokenHash: hashToken(nextToken), csrfToken: randomToken(16) },
   });
   if (updated.count !== 1) throw ApiError.conflict("Session changed; retry organization switch");
-  return { ...current, organizationId, role: membership.role };
+  return { ...current, organizationId, role: membership.role, token: nextToken };
 }
 
 export async function destroySession(): Promise<void> {

@@ -1,10 +1,10 @@
 import { NextRequest } from "next/server";
-import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { endCall } from "@/lib/domain/calls";
 import { ok, errorBody, ApiError } from "@/lib/errors";
 import { parseVerifiedTwilioForm, resolveTwilioOrganization } from "@/lib/webhook-security";
 import { normalizePhone } from "@/lib/phone";
+import { processTwilioWebhook } from "@/lib/webhook-transaction";
 
 // Call status callback (simulated Twilio). Dedup on (twilio, CallSid+Status).
 export async function POST(req: NextRequest) {
@@ -27,18 +27,12 @@ export async function POST(req: NextRequest) {
     }
 
     const externalId = `${callSid}#${status}`;
-    try {
-      await db.webhookEvent.create({
-        data: { organizationId: orgId, provider: "twilio", externalId, event: `status:${status}`, payloadJson: JSON.stringify({ CallSid: callSid, CallStatus: status }), signatureValid: true },
-      });
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        return Response.json(ok({ deduped: true }));
-      }
-      throw error;
-    }
     const mapped = mapStatus(status);
-    if (mapped) await endCall(orgId, call.id, mapped.status, mapped.outcome);
+    const processed = await processTwilioWebhook(
+      { organizationId: orgId, externalId, event: `status:${status}`, payload: { CallSid: callSid, CallStatus: status } },
+      async (tx) => { if (mapped) await endCall(orgId, call.id, mapped.status, mapped.outcome, tx); },
+    );
+    if (processed.deduped) return Response.json(ok({ deduped: true }));
     return Response.json(ok({ updated: true }));
   } catch (err) {
     const { status, body } = errorBody(err);

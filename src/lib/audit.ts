@@ -77,14 +77,14 @@ export function auditAsWorker(organizationId: string, workerName: string, input:
 
 // --- PII redaction ---------------------------------------------------------
 
-const PII_KEYS = ["passwordHash", "phoneE164", "toPhone", "fromPhone", "email", "addressStreet", "encryptedCreds", "tokenHash", "csrfToken", "voicemailTranscript"];
+const PII_KEY_PATTERN = /phone|email|address|token|password|secret|credential|encryptedcreds|voicemailtranscript/i;
 
 export function redactPii(value: unknown): unknown {
   if (value == null || typeof value !== "object") return value;
   if (Array.isArray(value)) return value.map(redactPii);
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-    if (PII_KEYS.includes(k)) {
+    if (PII_KEY_PATTERN.test(k)) {
       out[k] = "[REDACTED]";
     } else {
       out[k] = redactPii(v);

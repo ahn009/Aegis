@@ -19,6 +19,7 @@ import { upsertContactByPhone } from "../domain/contacts";
 import { sendSms } from "../domain/messaging";
 import { normalizePhone } from "../phone";
 import { audit } from "../audit";
+import { ApiError } from "../errors";
 
 // ============================================================================
 // Orchestrator loop. SPEC §5: orchestrator loop, state machine, tool registry,
@@ -60,15 +61,16 @@ export interface OrchestratorTurnResult {
 const SUPPORTED_SERVICES_DEFAULT = ["AC_REPAIR", "HEATING_REPAIR", "MAINTENANCE", "INSTALLATION", "INSPECTION"];
 
 export async function runTurn(input: OrchestratorInput, provider: AiProvider): Promise<OrchestratorTurnResult> {
+  const conv = await db.conversation.findFirst({
+    where: { id: input.conversationId, organizationId: input.organizationId, callId: input.callId },
+    include: { messages: { orderBy: { createdAt: "asc" } }, turns: { orderBy: { turnIndex: "asc" } } },
+  });
+  if (!conv) throw ApiError.notFound("Conversation not found");
   const org = await db.organization.findUniqueOrThrow({ where: { id: input.organizationId } });
   const supportedServices = await getSupportedServices(input.organizationId);
   const rules = await loadRuleContext(input.organizationId);
 
   // Load conversation + history
-  const conv = await db.conversation.findUniqueOrThrow({
-    where: { id: input.conversationId },
-    include: { messages: { orderBy: { createdAt: "asc" } }, turns: { orderBy: { turnIndex: "asc" } } },
-  });
   const currentState = conv.state as ConversationState;
 
   // Load / init structured intake from conversation summary (we store the
@@ -256,8 +258,8 @@ export async function runTurn(input: OrchestratorInput, provider: AiProvider): P
   for (const se of sideEffects) {
     if (se.kind === "APPOINTMENT_BOOKED" && se.ref) {
       // Send booking confirmation SMS (STOP-suppressed at sender level)
-      const appt = await db.appointment.findUnique({ where: { id: se.ref.entityId } });
-      const contact = appt?.contactId ? await db.contact.findUnique({ where: { id: appt.contactId } }) : null;
+      const appt = await db.appointment.findFirst({ where: { id: se.ref.entityId, organizationId: input.organizationId } });
+      const contact = appt?.contactId ? await db.contact.findFirst({ where: { id: appt.contactId, organizationId: input.organizationId } }) : null;
       if (appt && contact) {
         const when = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true, timeZone: org.timezone }).format(appt.startTime);
         await sendSms(input.organizationId, contact.phoneE164, `Your ${appt.serviceType.replace(/_/g, " ").toLowerCase()} appointment is confirmed for ${when}. Reply STOP to opt out.`, "BOOKING_CONFIRMATION");

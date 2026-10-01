@@ -35,14 +35,17 @@ describe("session organization binding", () => {
     await expect(switchSessionOrganizationForToken(token, outsider.id)).rejects.toMatchObject({ status: 404 });
     expect(await getSessionUserForToken(token)).toMatchObject({ organizationId: second.id });
 
-    expect(await switchSessionOrganizationForToken(token, first.id)).toMatchObject({ organizationId: first.id, role: "VIEWER" });
-    expect(await getSessionUserForToken(token)).toMatchObject({ organizationId: first.id, role: "VIEWER" });
+    const switched = await switchSessionOrganizationForToken(token, first.id);
+    expect(switched).toMatchObject({ organizationId: first.id, role: "VIEWER" });
+    expect(switched.token).not.toBe(token);
+    expect(await getSessionUserForToken(token)).toBeNull();
+    expect(await getSessionUserForToken(switched.token)).toMatchObject({ organizationId: first.id, role: "VIEWER" });
 
     await db.membership.delete({
       where: { organizationId_userId: { organizationId: first.id, userId: user.id } },
     });
-    expect(await getSessionUserForToken(token)).toBeNull();
-    await expect(switchSessionOrganizationForToken(token, second.id)).rejects.toMatchObject({ status: 401 });
+    expect(await getSessionUserForToken(switched.token)).toBeNull();
+    await expect(switchSessionOrganizationForToken(switched.token, second.id)).rejects.toMatchObject({ status: 401 });
   });
 
   it("rejects legacy sessions without an active organization", async () => {
@@ -56,5 +59,16 @@ describe("session organization binding", () => {
     await db.session.update({ where: { id: session.id }, data: { activeOrganizationId: null } });
     expect(await getSessionUserForToken(token)).toBeNull();
     await expect(createSession(user.id, "unknown-org", {})).rejects.toMatchObject({ status: 403 });
+  });
+
+  it.each(["idleExpiresAt", "absoluteExpiresAt"])("rejects and deletes sessions past %s", async (field) => {
+    const suffix = randomUUID();
+    const user = await db.user.create({ data: { email: `expired-${suffix}@example.test`, passwordHash: hashPassword("test-password") } });
+    const org = await db.organization.create({ data: { name: "Expiry", slug: `expiry-${suffix}` } });
+    await db.membership.create({ data: { userId: user.id, organizationId: org.id, role: "VIEWER" } });
+    const { token, session } = await createSession(user.id, org.id, {});
+    await db.session.update({ where: { id: session.id }, data: { [field]: new Date(Date.now() - 1000) } });
+    expect(await getSessionUserForToken(token)).toBeNull();
+    expect(await db.session.findUnique({ where: { id: session.id } })).toBeNull();
   });
 });

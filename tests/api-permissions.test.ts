@@ -18,6 +18,16 @@ import { GET as leadDetail } from "../src/app/api/leads/[id]/route";
 import { GET as appointmentDetail } from "../src/app/api/appointments/[id]/detail/route";
 import { PATCH as updateLead } from "../src/app/api/leads/[id]/status/route";
 import { POST as publishRule } from "../src/app/api/rules/[id]/publish/route";
+import { GET as callList } from "../src/app/api/calls/route";
+import { GET as leadList } from "../src/app/api/leads/route";
+import { GET as appointmentList } from "../src/app/api/appointments/route";
+import { GET as overview } from "../src/app/api/overview/route";
+import { GET as analytics } from "../src/app/api/analytics/route";
+import { GET as simulatedConversation } from "../src/app/api/simulate-call/[conversationId]/route";
+import { redactPii } from "../src/lib/audit";
+import { GET as ruleList, POST as createRule } from "../src/app/api/rules/route";
+import { runTurn } from "../src/lib/ai/orchestrator";
+import { createMockProvider } from "../src/lib/ai/provider-mock";
 
 const context = { params: Promise.resolve({ id: "missing-appointment" }) };
 const user = { userId: "test-user", organizationId: "test-organization", email: "user@example.test", name: null };
@@ -188,5 +198,68 @@ describe("staff route permission and tenant matrix", () => {
     getSessionUser.mockResolvedValue({ ...user, organizationId: second.id, role: "MANAGER" });
     expect((await post()).status).toBe(200);
     expect((await db.businessRuleVersion.findUniqueOrThrow({ where: { id: draft.id } })).status).toBe("PUBLISHED");
+  });
+
+  it("blocks foreign appointment mutations and restricts rule draft creation", async () => {
+    const first = await db.organization.findUniqueOrThrow({ where: { slug: "dfw-velora-hvac" } });
+    const second = await db.organization.create({ data: { name: "Mutation tenant", slug: `mutation-${randomUUID()}` } });
+    const appointment = await db.appointment.create({ data: { organizationId: second.id, serviceType: "REPAIR", startTime: new Date("2026-11-02T12:00:00Z"), endTime: new Date("2026-11-02T13:00:00Z"), status: "REQUESTED" } });
+    const ctx = { params: Promise.resolve({ id: appointment.id }) };
+    getSessionUser.mockResolvedValue({ ...user, organizationId: first.id, role: "DISPATCHER" });
+    expect((await confirm(request(`/api/appointments/${appointment.id}/confirm`), ctx)).status).toBe(404);
+    expect((await cancel(request(`/api/appointments/${appointment.id}/cancel`, undefined, { reason: "test" }), ctx)).status).toBe(404);
+    expect((await db.appointment.findUniqueOrThrow({ where: { id: appointment.id } })).status).toBe("REQUESTED");
+
+    getSessionUser.mockResolvedValue({ ...user, organizationId: first.id, role: "VIEWER" });
+    expect((await createRule(request("/api/rules", undefined, { ruleType: "holidays", data: { type: "holidays", holidays: [] } }), context)).status).toBe(403);
+    const foreignRule = await db.businessRuleVersion.create({ data: { organizationId: second.id, ruleType: "holidays", version: 1, dataJson: "{}" } });
+    const list = await ruleList(new NextRequest("http://localhost:3000/api/rules"), context);
+    expect(list.status).toBe(200);
+    expect(JSON.stringify((await list.json()).data)).not.toContain(foreignRule.id);
+  });
+
+  it("keeps foreign records out of list, overview, analytics, and simulator reads", async () => {
+    const first = await db.organization.findUniqueOrThrow({ where: { slug: "dfw-velora-hvac" } });
+    const second = await db.organization.create({ data: { name: "Read tenant", slug: `read-${randomUUID()}` } });
+    getSessionUser.mockResolvedValue({ ...user, organizationId: first.id, role: "VIEWER" });
+    const baseline = await overview(new NextRequest("http://localhost:3000/api/overview"), context);
+    const baselineTotals = (await baseline.json()).data;
+    const baselineAnalytics = (await (await analytics(new NextRequest("http://localhost:3000/api/analytics"), context)).json()).data.totals;
+    const call = await db.call.create({ data: { organizationId: second.id, callSid: randomUUID(), fromPhone: "+12145550105", toPhone: "+12145550106" } });
+    const conversation = await db.conversation.create({ data: { organizationId: second.id, callId: call.id } });
+    const lead = await db.lead.create({ data: { organizationId: second.id, phoneE164: "+12145550107", name: "Other tenant lead" } });
+    const appointment = await db.appointment.create({ data: { organizationId: second.id, serviceType: "REPAIR", startTime: new Date(Date.now() + 86_400_000), endTime: new Date(Date.now() + 90_000_000) } });
+    const reads = [
+      [callList, "/api/calls", call.id],
+      [leadList, "/api/leads", lead.id],
+      [appointmentList, "/api/appointments", appointment.id],
+    ] as const;
+    for (const [handler, path, foreignId] of reads) {
+      const response = await handler(new NextRequest(`http://localhost:3000${path}`), context);
+      expect(response.status).toBe(200);
+      expect(JSON.stringify((await response.json()).data)).not.toContain(foreignId);
+    }
+    const ownOverview = (await (await overview(new NextRequest("http://localhost:3000/api/overview"), context)).json()).data;
+    expect(ownOverview.calls.total).toBe(baselineTotals.calls.total);
+    expect(ownOverview.leads.total).toBe(baselineTotals.leads.total);
+    expect(ownOverview.activity).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: lead.id })]));
+    const ownAnalytics = (await (await analytics(new NextRequest("http://localhost:3000/api/analytics"), context)).json()).data;
+    expect(ownAnalytics.totals).toEqual(baselineAnalytics);
+    expect((await simulatedConversation(new NextRequest(`http://localhost:3000/api/simulate-call/${conversation.id}`), { params: Promise.resolve({ conversationId: conversation.id }) })).status).toBe(404);
+  });
+
+  it("rejects a foreign conversation at the orchestrator boundary before writing messages", async () => {
+    const first = await db.organization.findUniqueOrThrow({ where: { slug: "dfw-velora-hvac" } });
+    const second = await db.organization.create({ data: { name: "Turn tenant", slug: `turn-${randomUUID()}` } });
+    const call = await db.call.create({ data: { organizationId: second.id, callSid: randomUUID(), fromPhone: "+12145550108", toPhone: "+12145550109" } });
+    const conversation = await db.conversation.create({ data: { organizationId: second.id, callId: call.id } });
+    await expect(runTurn({ organizationId: first.id, conversationId: conversation.id, callId: call.id, callerUtterance: "Hello", fromPhone: call.fromPhone }, createMockProvider())).rejects.toMatchObject({ status: 404 });
+    expect(await db.conversationMessage.count({ where: { conversationId: conversation.id } })).toBe(0);
+  });
+});
+
+it("redacts contact routes and staff notification fields from audit payloads", () => {
+  expect(redactPii({ data: { transferPhone: "+12145550199", staffNotifyEmail: "private@example.test", reason: "updated" } })).toEqual({
+    data: { transferPhone: "[REDACTED]", staffNotifyEmail: "[REDACTED]", reason: "updated" },
   });
 });

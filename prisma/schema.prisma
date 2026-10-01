@@ -86,7 +86,7 @@ model User {
   sessions      Session[]
 }
 
-// Shared login-abuse history. Keys are HMACs of normalized email or trusted IP.
+// Legacy login-abuse history, retained until a versioned migration removes it.
 model LoginAttempt {
   id        String   @id @default(cuid())
   keyHash   String
@@ -94,6 +94,13 @@ model LoginAttempt {
 
   @@index([keyHash, createdAt])
   @@index([createdAt])
+}
+
+// Atomic shared counter for login admission across web instances.
+model LoginCounter {
+  keyHash         String   @id
+  count           Int      @default(0)
+  windowStartedAt DateTime
 }
 
 model Membership {
