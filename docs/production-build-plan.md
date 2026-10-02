@@ -1,6 +1,6 @@
 # Velora production build plan
 
-Status: **Phase 0 verified; Phase 1 in progress** · Started: 2026-09-29 · Source of truth for execution: [production-tracker.md](production-tracker.md)
+Status: **Phase 0 verified; Phase 1 blocked on staging and retention decisions** · Started: 2026-09-29 · Source of truth for execution: [production-tracker.md](production-tracker.md)
 
 ## Goal and launch contract
 
