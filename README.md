@@ -169,7 +169,7 @@ docs/adr/                     # architecture decision records
 | `VELORA_ENCRYPTION_KEY` | dev fallback | AES-256-GCM key for integration creds |
 | `VELORA_SESSION_SECRET` | dev fallback | Session signing + webhook HMAC |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` | _(empty)_ | Required at production startup; callback validation uses them, outbound send is still unavailable |
-| `VELORA_TRUSTED_PROXY` | _(empty)_ | Set to `render` only after staging confirms Render supplies the real client as the first `X-Forwarded-For` entry; enables IP-based login limiting |
+| `VELORA_TRUSTED_PROXY` | _(empty)_ | Production startup requires `render` for the provisional Render target. Login uses the edge-overwritten `CF-Connecting-IP` address and rejects missing or invalid values; verify this behavior in staging before serving traffic. |
 
 ---
 

@@ -10,6 +10,7 @@ const good = {
   VELORA_APP_BASE_URL: "https://app.velora.example",
   TWILIO_ACCOUNT_SID: `AC${"a".repeat(32)}`,
   TWILIO_AUTH_TOKEN: "0123456789abcdefABCDEF0123456789",
+  VELORA_TRUSTED_PROXY: "render",
 };
 
 describe("production configuration", () => {
@@ -27,6 +28,8 @@ describe("production configuration", () => {
     ["invalid provider URL", { OPENAI_BASE_URL: "http://localhost:1234" }],
     ["missing Twilio account", { TWILIO_ACCOUNT_SID: undefined }],
     ["missing Twilio token", { TWILIO_AUTH_TOKEN: undefined }],
+    ["missing trusted proxy", { VELORA_TRUSTED_PROXY: undefined }],
+    ["unsupported trusted proxy", { VELORA_TRUSTED_PROXY: "unknown" }],
   ])("rejects %s", (_name, override) => {
     expect(() => validateProductionConfig({ ...good, ...override })).toThrow("Invalid production configuration");
   });

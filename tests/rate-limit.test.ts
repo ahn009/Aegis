@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import { NextRequest } from "next/server";
 import { db } from "../src/lib/db";
 import { getClientIp } from "../src/lib/http";
@@ -50,6 +53,20 @@ describe("shared login abuse controls", () => {
     expect(results.filter((result) => result.status === "fulfilled" && result.value.ok)).toHaveLength(4);
   });
 
+  it("shares admission across two independent application processes", async () => {
+    const email = "two-process-reservation@example.test";
+    const childPath = fileURLToPath(new URL("./fixtures/login-admission-child.ts", import.meta.url));
+    const runChild = () => promisify(execFile)(process.execPath, ["--import", "tsx", childPath, email], {
+      env: process.env,
+      timeout: 15_000,
+    });
+    const children = await Promise.all([runChild(), runChild()]);
+    const outcomes = children.flatMap(({ stdout }) => JSON.parse(stdout) as boolean[]);
+    expect(outcomes.filter(Boolean)).toHaveLength(4);
+    expect(outcomes.filter((accepted) => !accepted)).toHaveLength(2);
+    expect((await db.loginCounter.findMany()).map((counter) => counter.count)).toContain(5);
+  });
+
   it("applies the shared limit to the public login route for unknown accounts", async () => {
     const attempt = () => login(new NextRequest("http://localhost:3000/api/auth/login", {
       method: "POST",
@@ -77,15 +94,29 @@ describe("trusted client address", () => {
     expect(getClientIp(req)).toBeUndefined();
   });
 
-  it("uses the first valid Render-forwarded address only when configured", () => {
+  it("uses only the Render edge address and ignores spoofable forwarded chains", () => {
     process.env.VELORA_TRUSTED_PROXY = "render";
     const valid = new NextRequest("http://localhost:3000/api/auth/login", {
-      headers: { "x-forwarded-for": "198.51.100.42, 10.0.0.1" },
+      headers: { "cf-connecting-ip": "198.51.100.42", "x-forwarded-for": "203.0.113.99, 198.51.100.42" },
     });
     const invalid = new NextRequest("http://localhost:3000/api/auth/login", {
-      headers: { "x-forwarded-for": "not-an-ip" },
+      headers: { "cf-connecting-ip": "not-an-ip", "x-forwarded-for": "203.0.113.99" },
+    });
+    const missing = new NextRequest("http://localhost:3000/api/auth/login", {
+      headers: { "x-forwarded-for": "203.0.113.99, 198.51.100.42" },
     });
     expect(getClientIp(valid)).toBe("198.51.100.42");
-    expect(getClientIp(invalid)).toBeUndefined();
+    expect(() => getClientIp(invalid)).toThrow("Trusted client address unavailable");
+    expect(() => getClientIp(missing)).toThrow("Trusted client address unavailable");
+  });
+
+  it("fails closed on the public login route when the trusted edge address is absent", async () => {
+    process.env.VELORA_TRUSTED_PROXY = "render";
+    const response = await login(new NextRequest("http://localhost:3000/api/auth/login", {
+      method: "POST",
+      headers: { origin: "http://localhost:3000", "content-type": "application/json", "x-forwarded-for": "203.0.113.99" },
+      body: JSON.stringify({ email: "edge-missing@example.test", password: "wrong-password" }),
+    }), { params: Promise.resolve({}) });
+    expect(response.status).toBe(503);
   });
 });

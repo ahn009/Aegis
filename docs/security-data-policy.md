@@ -7,6 +7,7 @@ Status: engineering policy for the production build, 2026-10-02. Customer data r
 - A session selects one active organization. Every dashboard read and mutation must derive that organization from the session, and foreign resource IDs return 404. Mutations require an exact same-origin `Origin` header; role gates apply to staff writes and sensitive reads.
 - Provider callbacks must pass Twilio signature and account checks. A signed destination selects the tenant; caller-supplied organization IDs have no authority. Receipt payloads store provider IDs and destination only, never SMS body, sender phone, transcripts, or credentials.
 - Only managers and above can read the complete audit log. Worker error text requires administrator access. The production simulator and live webhooks remain disabled until the real integration gates pass.
+- Production startup requires a supported trusted edge setting. For the provisional Render target, login admission uses `CF-Connecting-IP` and rejects missing or malformed values; caller-controlled `X-Forwarded-For` entries are ignored. This follows [Render's public web-service guidance](https://render.com/articles/host-pocketbase-on-render) and still requires a staging check on the chosen deployment.
 
 ## Durability
 

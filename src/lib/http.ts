@@ -48,10 +48,13 @@ export async function parseQuery<T>(req: NextRequest, schema: ZodType<T>): Promi
 }
 
 export function getClientIp(req: NextRequest): string | undefined {
-  // Only the configured edge deployment may supply a trusted forwarded address.
-  // This setting must be checked against the actual proxy behavior in staging.
+  // Render's public edge overwrites CF-Connecting-IP. X-Forwarded-For can
+  // contain a caller-supplied leftmost value, so it is not an admission key.
+  // Confirm the header behavior on the selected staging deployment.
   if (process.env.VELORA_TRUSTED_PROXY !== "render") return undefined;
-  const fwd = req.headers.get("x-forwarded-for");
-  const candidate = fwd?.split(",")[0]?.trim();
-  return candidate && isIP(candidate) ? candidate : undefined;
+  const candidate = req.headers.get("cf-connecting-ip")?.trim();
+  if (!candidate || !isIP(candidate)) {
+    throw new ApiError(503, "Trusted client address unavailable", "SERVICE_UNAVAILABLE");
+  }
+  return candidate;
 }

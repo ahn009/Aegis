@@ -38,5 +38,8 @@ export function validateProductionConfig(values: Readonly<Record<string, string 
   if (!/^\S{32,}$/.test(twilioAuthToken) || /demo|example|test|placeholder|change.?me/i.test(twilioAuthToken) || /^(.)\1+$/.test(twilioAuthToken)) {
     errors.push("TWILIO_AUTH_TOKEN must be configured");
   }
+  if (values.VELORA_TRUSTED_PROXY !== "render") {
+    errors.push("VELORA_TRUSTED_PROXY must name a supported trusted edge");
+  }
   if (errors.length) throw new Error(`Invalid production configuration:\n- ${errors.join("\n- ")}`);
 }
