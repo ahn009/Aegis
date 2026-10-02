@@ -1,7 +1,7 @@
 import { db } from "../db";
 import { releaseExpiredHold } from "../domain/appointments";
 import { sendSms } from "../domain/messaging";
-import { auditAsWorker } from "../audit";
+import { auditInTransaction, auditRequired } from "../audit";
 
 // ============================================================================
 // Outbox worker. SPEC §11: idempotency keys on external side effects, retry
@@ -61,23 +61,24 @@ export async function processOutbox(maxItems = 50, organizationId?: string): Pro
       const attempts = ev.attempts + 1;
       const lastError = e instanceof Error ? e.message : String(e);
       const dead = attempts >= MAX_ATTEMPTS;
-      await db.outboxEvent.update({
-        where: { id: ev.id },
-        data: {
-          status: dead ? "DEAD" : "PENDING",
-          attempts,
-          lastError,
-          processAfter: new Date(now.getTime() + BASE_BACKOFF_MS * Math.pow(2, attempts - 1)),
-        },
+      await db.$transaction(async (tx) => {
+        await tx.outboxEvent.update({
+          where: { id: ev.id },
+          data: {
+            status: dead ? "DEAD" : "PENDING",
+            attempts,
+            lastError,
+            processAfter: new Date(now.getTime() + BASE_BACKOFF_MS * Math.pow(2, attempts - 1)),
+          },
+        });
+        await auditInTransaction(tx, {
+          organizationId: ev.organizationId, actorType: "WORKER", actorId: "outbox-worker",
+          action: "OUTBOX_RETRY", entityType: "OutboxEvent", entityId: ev.id,
+          after: { eventType: ev.eventType, attempts, lastError, dead },
+        });
       });
       if (dead) result.deadLettered++;
       else result.failed++;
-      await auditAsWorker(ev.organizationId, "outbox-worker", {
-        action: "OUTBOX_RETRY",
-        entityType: "OutboxEvent",
-        entityId: ev.id,
-        after: { eventType: ev.eventType, attempts, lastError, dead },
-      }).catch(() => {});
     }
   }
   return result;
@@ -105,7 +106,8 @@ async function dispatch(eventType: string, payloadJson: string, organizationId: 
       if (process.env.NODE_ENV === "production") {
         throw new Error("Staff notification provider is not configured");
       }
-      await auditAsWorker(organizationId, "outbox-worker", {
+      await auditRequired({
+        organizationId, actorType: "WORKER", actorId: "outbox-worker",
         action: "STAFF_NOTIFY",
         entityType: "Notification",
         after: payload,

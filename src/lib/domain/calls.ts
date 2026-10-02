@@ -1,9 +1,8 @@
 import { db } from "../db";
 import { ApiError } from "../errors";
-import { auditAsWorker } from "../audit";
+import { auditInTransaction } from "../audit";
 import { normalizePhone } from "../phone";
-import type { Prisma } from "@prisma/client";
-import { redactPii } from "../audit";
+import type { Call, Conversation, Prisma } from "@prisma/client";
 
 // ============================================================================
 // Call + conversation service. SPEC §4 (voice infra) + §20 (state machine).
@@ -19,7 +18,8 @@ export interface InboundCallInput {
   toPhone: string;
 }
 
-export async function startInboundCall(input: InboundCallInput, client: Prisma.TransactionClient = db) {
+export async function startInboundCall(input: InboundCallInput, client: Prisma.TransactionClient = db): Promise<{ call: Call; conversation: Conversation; deduped: boolean }> {
+  if (client === db) return db.$transaction((tx) => startInboundCall(input, tx));
   const fromPhone = normalizePhone(input.fromPhone);
   if (!fromPhone) throw new ApiError(422, "Invalid from phone", "VALIDATION");
   // Dedup on CallSid (SPEC: webhooks dedup on (provider, CallSid + event))
@@ -53,18 +53,11 @@ export async function startInboundCall(input: InboundCallInput, client: Prisma.T
       state: "GREETING",
     },
   });
-  if (client === db) {
-    await auditAsWorker(input.organizationId, "voice-gateway", {
-      action: "CALL_START", entityType: "Call", entityId: call.id,
-      after: { callSid: input.callSid, fromPhone, contactId: contact?.id ?? null },
-    });
-  } else {
-    await client.auditLog.create({ data: {
-      organizationId: input.organizationId, actorType: "WORKER", actorId: "voice-gateway",
-      action: "CALL_START", entityType: "Call", entityId: call.id,
-      afterJson: JSON.stringify(redactPii({ callSid: input.callSid, fromPhone, contactId: contact?.id ?? null })),
-    } });
-  }
+  await auditInTransaction(client, {
+    organizationId: input.organizationId, actorType: "WORKER", actorId: "voice-gateway",
+    action: "CALL_START", entityType: "Call", entityId: call.id,
+    after: { callSid: input.callSid, fromPhone, contactId: contact?.id ?? null },
+  });
   return { call, conversation, deduped: false };
 }
 

@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 import { db } from "../src/lib/db";
 import { createLead, updateLeadStatus } from "../src/lib/domain/leads";
 import { bookAppointment, cancelAppointment, confirmAppointment, releaseExpiredHold, requestAppointment } from "../src/lib/domain/appointments";
-import { createDraftVersion, publishVersion } from "../src/lib/rules/engine";
+import { createDraftVersion, loadRuleContext, publishVersion } from "../src/lib/rules/engine";
 import { upsertContactByPhone } from "../src/lib/domain/contacts";
+import { handleInboundSms, sendSms } from "../src/lib/domain/messaging";
+import { startInboundCall } from "../src/lib/domain/calls";
+import { processOutbox } from "../src/lib/worker/outbox";
+import { executeTool } from "../src/lib/ai/tool-executor";
 
 async function failAuditDuring(action: () => Promise<unknown>) {
   await db.$executeRawUnsafe('CREATE TRIGGER fail_audit BEFORE INSERT ON "AuditLog" BEGIN SELECT RAISE(ABORT, "audit unavailable"); END');
@@ -83,5 +87,52 @@ describe("staff action audit durability", () => {
     const foreign = await db.contact.create({ data: { organizationId: second.id, phoneE164: "+12145550145" } });
     await expect(bookAppointment({ organizationId: first.id, contactId: foreign.id, serviceType: "REPAIR", startIso: "2027-01-11T12:00:00Z", endIso: "2027-01-11T13:00:00Z" })).rejects.toMatchObject({ status: 404 });
     expect(await db.appointment.count({ where: { organizationId: first.id, contactId: foreign.id } })).toBe(0);
+  });
+
+  it("rolls back a simulated SMS send and suppression record when audit fails", async () => {
+    const org = await db.organization.findUniqueOrThrow({ where: { slug: "dfw-velora-hvac" } });
+    const phone = "+12145550146";
+    await failAuditDuring(() => sendSms(org.id, phone, "test message"));
+    expect(await db.smsMessage.count({ where: { organizationId: org.id, toPhone: phone } })).toBe(0);
+    await db.smsOptOut.create({ data: { organizationId: org.id, phoneE164: phone, reason: "STOP" } });
+    await failAuditDuring(() => sendSms(org.id, phone, "test message"));
+    expect(await db.smsMessage.count({ where: { organizationId: org.id, toPhone: phone } })).toBe(0);
+  });
+
+  it("rolls back inbound STOP and direct call creation when audit fails", async () => {
+    const org = await db.organization.findUniqueOrThrow({ where: { slug: "dfw-velora-hvac" } });
+    const phone = "+12145550147";
+    await failAuditDuring(() => handleInboundSms(org.id, phone, "STOP"));
+    expect(await db.smsOptOut.count({ where: { organizationId: org.id, phoneE164: phone } })).toBe(0);
+    expect(await db.smsMessage.count({ where: { organizationId: org.id, toPhone: phone } })).toBe(0);
+    const callSid = `audit-call-${Date.now()}`;
+    await failAuditDuring(() => startInboundCall({ organizationId: org.id, callSid, fromPhone: phone, toPhone: "+12145550148" }));
+    expect(await db.call.count({ where: { callSid } })).toBe(0);
+  });
+
+  it("does not advance a failed outbox attempt without its audit row", async () => {
+    const org = await db.organization.findUniqueOrThrow({ where: { slug: "dfw-velora-hvac" } });
+    const event = await db.outboxEvent.create({ data: {
+      organizationId: org.id, eventType: "REMINDER_2H", payloadJson: "invalid-json",
+      processAfter: new Date(Date.now() - 1000),
+    } });
+    await failAuditDuring(() => processOutbox(1, org.id));
+    const after = await db.outboxEvent.findUniqueOrThrow({ where: { id: event.id } });
+    expect(after.attempts).toBe(0);
+    expect(after.status).toBe("PROCESSING");
+    expect(await db.auditLog.count({ where: { action: "OUTBOX_RETRY", entityId: event.id } })).toBe(0);
+  });
+
+  it("records successful AI tool attempts and refuses an unaudited result", async () => {
+    const org = await db.organization.findUniqueOrThrow({ where: { slug: "dfw-velora-hvac" } });
+    const ctx = {
+      organizationId: org.id, supportedServices: [], rules: await loadRuleContext(org.id),
+      org: { name: org.name, timezone: org.timezone },
+    };
+    const result = await executeTool("check_service_area", { zip: "75201" }, ctx);
+    expect(result.executionOk).toBe(true);
+    expect(await db.auditLog.count({ where: { organizationId: org.id, action: "AI_TOOL_EXEC", actorId: "check_service_area" } })).toBe(1);
+    await failAuditDuring(() => executeTool("check_service_area", { zip: "75201" }, ctx));
+    expect(await db.auditLog.count({ where: { organizationId: org.id, action: "AI_TOOL_EXEC", actorId: "check_service_area" } })).toBe(1);
   });
 });

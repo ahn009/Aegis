@@ -1,6 +1,6 @@
 # Security data handling policy and release gates
 
-Status: engineering policy for the production build, 2026-10-01. Customer data retention periods and deletion requests require an operator decision before live traffic.
+Status: engineering policy for the production build, 2026-10-02. Customer data retention periods and deletion requests require an operator decision before live traffic.
 
 ## Access and tenant boundary
 
@@ -12,7 +12,8 @@ Status: engineering policy for the production build, 2026-10-01. Customer data r
 
 - A provider callback receipt is committed in the same database transaction as its local business changes. A failed transaction leaves no receipt so retry can work; a committed receipt is deduplicated. Provider sends and other external effects require their own idempotency boundary in Phases 2–3.
 - Staff lead status, appointment confirmation/cancellation, and rule draft/publish writes commit with their audit row in one transaction. Contact and lead creation/updates, appointment creation, and expired-hold cancellation do the same. Appointment creation also enqueues its reminder or hold-expiry jobs in that transaction. An audit failure rolls back the business change; isolated failure-injection tests cover these paths.
-- The generic `audit()` hook remains best effort and can swallow two write failures. Simulated SMS and other AI/worker actions still use it after their business changes. Production release requires transactional audit or a durable outbox for those paths, plus reconciliation tests (P1-03/P1-04/P1-01). Do not claim a complete action history before that gate passes.
+- Simulated SMS records, inbound STOP/START changes, direct call creation, worker retry state, and unreachable-transfer follow-up jobs now commit with their audit rows. AI tool attempts, including successful attempts, require an audit write before returning a result. The best-effort audit helper has been removed.
+- AI tool attempt rows are still written after their domain mutations, and worker dispatch completion is not atomic with external effects. A process crash between those steps can leave incomplete attempt history or duplicate effects. Production release requires a durable turn/outbox boundary and reconciliation tests (P1-03/P1-04/P1-01). Do not claim a complete action history before that gate passes.
 - Audit writers redact keys that indicate phone, email, address, token, password, secret, or credentials; rule draft audits use the same redaction. This is key-based minimization, so free-text fields can still contain personal data. Route roles restrict audit reads, while database operator access remains governed by the eventual hosting configuration.
 
 ## Retention and deletion

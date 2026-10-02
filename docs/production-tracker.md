@@ -1,12 +1,12 @@
 # Production work tracker
 
-Updated: 2026-10-01 · Plan: [production-build-plan.md](production-build-plan.md)
+Updated: 2026-10-02 · Plan: [production-build-plan.md](production-build-plan.md)
 
 ## Current position
 
 Phase 0 is **verified**. Phase 1 is **in progress**. The launch target includes live inbound calls, SMS, the dashboard, and AI agents performing daily operations with a trace of every action. OpenAI API is selected. Twilio + paid Render Ohio + managed Postgres is the provisional implementation target in [ADR 0006](adr/0006-production-platform-target.md); provider accounts and deployment remain undecided. The application is **not production ready**.
 
-Phase 1 local session, route, and callback foundations pass clean CI. Staff lead, appointment, and rule mutations now write their audit rows transactionally; other AI/worker actions still need durable records. Remaining exit evidence depends on a selected staging proxy/provider and customer-data retention decisions described in [security-data-policy.md](security-data-policy.md). Live webhooks still return 503.
+Phase 1 local session, route, and callback foundations pass clean CI. Staff mutations, simulated SMS, direct call creation, worker retry state, and unreachable-transfer follow-up jobs now write audit rows with their business changes; successful AI tool attempts require an audit write before returning. Process crashes between AI/worker steps can still leave incomplete histories, as described in [security-data-policy.md](security-data-policy.md). Remaining exit evidence depends on a selected staging proxy/provider and customer-data retention decisions. Live webhooks still return 503.
 
 Legend: `open` = not started; `in_progress` = work underway; `pending` = deliberately paused for later continuation; `blocked` = cannot proceed without a named dependency; `verified` = acceptance evidence recorded; `deferred` = explicitly removed from release scope with reason.
 
@@ -40,7 +40,7 @@ Legend: `open` = not started; `in_progress` = work underway; `pending` = deliber
 | P1-07 | 6 | pending | Preview Caddy config, websocket examples, and shell tests removed; create environment-neutral staging deploy | Staging deployment and smoke test |
 | P1-08 | 3 | open | Choose DB and write migrations/restore plan | Migration and restore evidence |
 | P1-09 | 4 | open | Define agent roles, tasks and approval policy | Approved design + task schema and policy tests |
-| P1-10 | 1 | in_progress | Make remaining SMS/AI/worker mutations audit-durable; approve and implement retention/deletion policy | Staff lead, appointment, rule, contact, lead-create and hold-expiry writes roll back on audit failure; appointment creation includes audit and outbox; [CI run 36884297042](https://github.com/ahn009/Aegis/actions/runs/36884297042) passes; remaining action classes and retention schedule still open |
+| P1-10 | 1 | in_progress | Approve and implement retention/deletion policy; complete durable AI turn and worker dispatch history in Phases 3–4 | Staff, appointment, contact, lead, hold, simulated SMS, direct call, worker retry and unreachable-transfer follow-up writes roll back on audit failure; successful AI attempts require audit; [CI run 36884297042](https://github.com/ahn009/Aegis/actions/runs/36884297042) covers the prior checkpoint; crash gaps and retention schedule remain open |
 | P2-01 | 0 | verified | Preserve truthful preview labels and production guards until real integrations replace them | Production browser: simulator hidden, authenticated route 404, webhooks 503, no page errors/overflow |
 | P2-02 | 3 | open | Remove fixed timezone and stale holidays | Org timezone/DST tests |
 | P2-03 | 6 | open | Decide robots/security headers/cache policy | Header and crawler checks |
@@ -67,6 +67,7 @@ Legend: `open` = not started; `in_progress` = work underway; `pending` = deliber
 | AI provider/model | OpenAI API selected; model and spend policy pending | Provider contract, cost and latency targets |
 | Agent autonomy | Start with approvals for customer-visible or destructive actions | Policy and review queue design |
 | CRM integration | Undecided; no-op field exists today | Onboarding and data synchronization scope |
+| Customer-data retention | No approved periods, deletion authority, or legal-hold policy | Required before live traffic; cleanup/backup behavior cannot be finalized |
 
 ## Verification log
 
@@ -133,6 +134,7 @@ Legend: `open` = not started; `in_progress` = work underway; `pending` = deliber
 | 2026-10-01 | P1-10 contact/lead/hold CI [run 36883333069](https://github.com/ahn009/Aegis/actions/runs/36883333069) | Clean install, Prisma generation, typecheck, lint, 72 tests, and production build passed on `a152adb`. |
 | 2026-10-01 | P1-10 appointment creation atomicity | Booking and request paths now write appointment, audit, and reminder/hold-expiry outbox rows in one transaction. Foreign contact, lead, and call IDs are rejected before creating an appointment. Failure injection confirms no appointment or job survives a failed audit write. `npm test` 74/74, `npm run typecheck`, `npm run lint`, and `DATABASE_URL=file:/tmp/velora-build.db NEXT_TELEMETRY_DISABLED=1 npm run build` pass; pushed CI pending. Simulated SMS/other AI actions and approved retention still remain. |
 | 2026-10-01 | P1-10 appointment atomicity CI [run 36884297042](https://github.com/ahn009/Aegis/actions/runs/36884297042) | Clean install, Prisma generation, typecheck, lint, 74 tests, and production build passed on `922a9f1`. Phase 1 remains in progress pending provider/proxy staging checks and customer-data retention decisions; live webhooks remain 503. |
+| 2026-10-02 | P1-10 SMS/call/AI/worker audit checkpoint | `src/lib/domain/messaging.ts`, `calls.ts`, `worker/outbox.ts`, `ai/tool-executor.ts`, and `audit.ts`: simulated SMS, inbound STOP/START, direct call creation, worker retry state, and unreachable-transfer follow-up jobs now commit with audit; AI tool attempts require a successful audit write. Removed the unused best-effort helper. Failure injection in `tests/audit-durability.test.ts` proves rollback or refusal of an unaudited result. `npm test` 78/78, `npm run typecheck`, `npm run lint`, and `DATABASE_URL=file:/tmp/velora-build.db NEXT_TELEMETRY_DISABLED=1 npm run build` pass locally. Clean pushed CI pending. Remaining: selected-provider callback and selected-proxy multi-instance staging evidence, approved retention/deletion schedule, and durable cross-step agent/worker traces in Phases 3–4. |
 
 ## Next steps
 

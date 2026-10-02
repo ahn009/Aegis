@@ -5,7 +5,7 @@ import { getAvailability, bookAppointment, requestAppointment, BookingConflictEr
 import { upsertContactByPhone } from "../domain/contacts";
 import { createLead } from "../domain/leads";
 import { sendSms } from "../domain/messaging";
-import { audit } from "../audit";
+import { auditInTransaction, auditRequired } from "../audit";
 import type { RuleContext } from "../rules/engine";
 import { db } from "../db";
 import { ApiError } from "../errors";
@@ -64,14 +64,15 @@ export async function executeTool(
   }
   const args = parsed.data;
   // 2. Execute via domain service (org context injected server-side)
+  let attempt: ToolExecutionAttempt;
   try {
     const result = await dispatch(name, args, ctx);
     // executionOk reflects the tool's business outcome (result.ok), not just
     // whether dispatch ran without throwing. e.g. out-of-area → executionOk:false.
-    return { tool: name, args: rawArgs, validationOk: true, executionOk: result.ok, result, repaired: false, sideEffects: result.sideEffects ?? [] };
+    attempt = { tool: name, args: rawArgs, validationOk: true, executionOk: result.ok, result, repaired: false, sideEffects: result.sideEffects ?? [] };
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
-    return logAttempt(ctx, {
+    attempt = {
       tool: name,
       args: rawArgs,
       validationOk: true,
@@ -79,8 +80,9 @@ export async function executeTool(
       error,
       repaired: false,
       sideEffects: [],
-    });
+    };
   }
+  return logAttempt(ctx, attempt);
 }
 
 async function dispatch(name: string, args: any, ctx: ExecContext): Promise<ToolResult & { sideEffects?: SideEffect[] }> {
@@ -232,13 +234,20 @@ async function dispatch(name: string, args: any, ctx: ExecContext): Promise<Tool
       if (!target.phone) {
         // No transfer target → voicemail + staff notification + follow-up record
         // SPEC: never promise a callback without a created follow-up.
-        await db.outboxEvent.create({
-          data: {
-            organizationId: ctx.organizationId,
-            eventType: "STAFF_NOTIFY",
-            payloadJson: JSON.stringify({ reason: args.reason, target: "unreachable", staffNotifyEmail: target.staffNotifyEmail }),
-            idempotencyKey: `transfer-fail-${ctx.callId ?? "n/a"}-${Date.now()}`,
-          },
+        await db.$transaction(async (tx) => {
+          const event = await tx.outboxEvent.create({
+            data: {
+              organizationId: ctx.organizationId,
+              eventType: "STAFF_NOTIFY",
+              payloadJson: JSON.stringify({ reason: args.reason, target: "unreachable", staffNotifyEmail: target.staffNotifyEmail }),
+              idempotencyKey: `transfer-fail-${ctx.callId ?? "n/a"}-${Date.now()}`,
+            },
+          });
+          await auditInTransaction(tx, {
+            organizationId: ctx.organizationId, actorType: "AI_TOOL", actorId: "transfer_to_human",
+            action: "STAFF_FOLLOW_UP_CREATE", entityType: "OutboxEvent", entityId: event.id,
+            after: { reason: args.reason, target: "unreachable" },
+          });
         });
         return {
           ok: false,
@@ -247,7 +256,7 @@ async function dispatch(name: string, args: any, ctx: ExecContext): Promise<Tool
         };
       }
       // Audit the transfer
-      await audit({
+      await auditRequired({
         organizationId: ctx.organizationId,
         actorType: "AI_TOOL",
         actorId: "transfer_to_human",
@@ -268,7 +277,7 @@ async function dispatch(name: string, args: any, ctx: ExecContext): Promise<Tool
 }
 
 async function logAttempt(ctx: ExecContext, attempt: ToolExecutionAttempt): Promise<ToolExecutionAttempt> {
-  await audit({
+  await auditRequired({
     organizationId: ctx.organizationId,
     actorType: "AI_TOOL",
     actorId: attempt.tool,
@@ -276,6 +285,6 @@ async function logAttempt(ctx: ExecContext, attempt: ToolExecutionAttempt): Prom
     entityType: "ToolCall",
     entityId: ctx.conversationId,
     after: { tool: attempt.tool, validationOk: attempt.validationOk, executionOk: attempt.executionOk, error: attempt.error, args: attempt.args },
-  }).catch(() => {});
+  });
   return attempt;
 }

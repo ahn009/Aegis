@@ -18,7 +18,6 @@ import { appendMessage, recordTurn, updateConversationState } from "../domain/ca
 import { upsertContactByPhone } from "../domain/contacts";
 import { sendSms } from "../domain/messaging";
 import { normalizePhone } from "../phone";
-import { audit } from "../audit";
 import { ApiError } from "../errors";
 
 // ============================================================================

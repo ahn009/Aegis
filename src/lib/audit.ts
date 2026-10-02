@@ -1,5 +1,4 @@
 import { db } from "./db";
-import type { SessionUser } from "./session";
 import type { Prisma } from "@prisma/client";
 
 export type AuditActorType = "USER" | "AI_TOOL" | "WORKER" | "SYSTEM";
@@ -35,54 +34,9 @@ export async function auditInTransaction(tx: Prisma.TransactionClient, input: Au
   await tx.auditLog.create({ data: auditRow(input) });
 }
 
-/**
- * Best-effort audit hook for legacy AI/worker flows. No UPDATE/DELETE endpoints
- * exist for audit. Failures are logged and retried once, but can still leave a
- * business action without an audit row. New durable actions should use
- * auditInTransaction until the remaining flows gain transactional writes.
- */
-export async function audit(input: AuditInput): Promise<void> {
-  const row = auditRow(input);
-  try {
-    await db.auditLog.create({ data: row });
-  } catch (e) {
-    console.error("[audit] write failed (attempt 1):", e);
-    try {
-      await db.auditLog.create({ data: row });
-    } catch (e2) {
-      console.error("[audit] write failed (attempt 2, giving up):", e2);
-    }
-  }
-}
-
-/** Audit as the session user (convenience). */
-export function auditAsUser(user: SessionUser, input: Omit<AuditInput, "organizationId" | "actorType" | "actorId">) {
-  return audit({
-    ...input,
-    organizationId: user.organizationId,
-    actorType: "USER",
-    actorId: user.userId,
-  });
-}
-
-/** Audit as an AI tool call (convenience). */
-export function auditAsAiTool(organizationId: string, toolName: string, input: Omit<AuditInput, "organizationId" | "actorType" | "actorId">) {
-  return audit({
-    ...input,
-    organizationId,
-    actorType: "AI_TOOL",
-    actorId: toolName,
-  });
-}
-
-/** Audit as a background worker (convenience). */
-export function auditAsWorker(organizationId: string, workerName: string, input: Omit<AuditInput, "organizationId" | "actorType" | "actorId">) {
-  return audit({
-    ...input,
-    organizationId,
-    actorType: "WORKER",
-    actorId: workerName,
-  });
+/** Mandatory audit for actions without a business transaction. */
+export async function auditRequired(input: AuditInput): Promise<void> {
+  await db.auditLog.create({ data: auditRow(input) });
 }
 
 // --- PII redaction ---------------------------------------------------------

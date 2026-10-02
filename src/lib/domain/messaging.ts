@@ -1,9 +1,8 @@
 import { db } from "../db";
-import { auditAsWorker } from "../audit";
+import { auditInTransaction } from "../audit";
 import { normalizePhone, isValidE164 } from "../phone";
 import { ApiError } from "../errors";
 import type { Prisma } from "@prisma/client";
-import { redactPii } from "../audit";
 
 // ============================================================================
 // SMS messaging service. SPEC HARD CONSTRAINT:
@@ -17,6 +16,7 @@ const START_KEYWORDS = ["START", "YES", "UNSTOP"];
 
 /** Inbound SMS handler. Detects STOP/START and toggles suppression. */
 export async function handleInboundSms(organizationId: string, fromPhone: string, body: string, client: Prisma.TransactionClient = db): Promise<{ suppressed: boolean; replied: boolean }> {
+  if (client === db) return db.$transaction((tx) => handleInboundSms(organizationId, fromPhone, body, tx));
   const phone = normalizePhone(fromPhone);
   if (!phone || !isValidE164(phone)) return { suppressed: false, replied: false };
   const upper = body.trim().toUpperCase();
@@ -84,22 +84,26 @@ export async function sendSms(
     throw new ApiError(503, "SMS provider is not configured", "SERVICE_UNAVAILABLE");
   }
   // SENDER-LEVEL GATE — enforced here, not in templates.
-  if (await isSuppressed(organizationId, phone)) {
-    const msg = await db.smsMessage.create({
-      data: { organizationId, toPhone: phone, fromPhone: null, body, direction: "OUTBOUND", templateKey, status: "STOPPED" },
+  return db.$transaction(async (tx) => {
+    const optedOut = await tx.smsOptOut.findUnique({
+      where: { organizationId_phoneE164: { organizationId, phoneE164: phone } },
     });
-    await auditAsWorker(organizationId, "sms-sender", {
-      action: "SMS_SUPPRESSED",
-      entityType: "SmsMessage",
-      entityId: msg.id,
-      after: { toPhone: phone, templateKey, reason: "OPT_OUT" },
-    });
-    return { status: "STOPPED", messageId: msg.id };
-  }
-  return sendSmsInternal(organizationId, phone, body, templateKey);
+    if (optedOut) {
+      const msg = await tx.smsMessage.create({
+        data: { organizationId, toPhone: phone, fromPhone: null, body, direction: "OUTBOUND", templateKey, status: "STOPPED" },
+      });
+      await auditSms(organizationId, "sms-sender", {
+        action: "SMS_SUPPRESSED", entityType: "SmsMessage", entityId: msg.id,
+        after: { toPhone: phone, templateKey, reason: "OPT_OUT" },
+      }, tx);
+      return { status: "STOPPED" as const, messageId: msg.id };
+    }
+    return sendSmsInternal(organizationId, phone, body, templateKey, tx);
+  });
 }
 
 async function sendSmsInternal(organizationId: string, phone: string, body: string, templateKey?: string, client: Prisma.TransactionClient = db) {
+  if (client === db) return db.$transaction((tx) => sendSmsInternal(organizationId, phone, body, templateKey, tx));
   if (process.env.NODE_ENV === "production") {
     throw new ApiError(503, "SMS provider is not configured", "SERVICE_UNAVAILABLE");
   }
@@ -123,12 +127,11 @@ async function auditSms(
   input: { action: string; entityType: string; entityId: string; after: unknown },
   client: Prisma.TransactionClient,
 ) {
-  if (client === db) return auditAsWorker(organizationId, actorId, input);
-  await client.auditLog.create({ data: {
+  await auditInTransaction(client, {
     organizationId, actorType: "WORKER", actorId,
     action: input.action, entityType: input.entityType, entityId: input.entityId,
-    afterJson: JSON.stringify(redactPii(input.after)),
-  } });
+    after: input.after,
+  });
 }
 
 /**
