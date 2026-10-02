@@ -1,0 +1,15 @@
+# Phase 1 security and tenancy exit evidence
+
+Status: verified against the Phase 1 exit gate in [the production build plan](production-build-plan.md), 2026-10-02. This is an application security foundation, not a live-service or production-release sign-off.
+
+| Phase 1 requirement | Evidence | Remaining release gate |
+| --- | --- | --- |
+| Production startup fails on unsafe configuration | `tests/production-config.test.ts` checks secrets, HTTPS URLs, OpenAI, Twilio credentials, and a supported trusted edge. Rebuilt standalone web and worker startup checks exited 1 with missing settings. | The chosen database topology and migration validation are Phase 3. |
+| Session tenant, role, and origin boundaries | `tests/session-tenancy.test.ts`, `tests/request-origin.test.ts`, and `tests/api-permissions.test.ts` cover two-organization switching, old-token revocation, expiry, foreign resource IDs, role denials, and authenticated mutation origins. A local browser and HTTP check confirmed organization switching does not show the prior tenant's contact. | New routes must preserve this matrix. |
+| Authenticated and deduplicated callbacks | `tests/webhook-security.test.ts` and `tests/webhook-routes.test.ts` cover signed forms, account SID, destination tenant mapping, forged bodies, unknown destinations, replay, transactional rollback/retry, and call-status audit. Receipt payloads omit message text and sender phone. Production callbacks remain 503. | Selected-provider sandbox behavior and real voice/SMS processing are Phase 2; staging callback smoke is Phase 6. |
+| Login abuse and trusted proxy policy | `tests/rate-limit.test.ts` covers unknown/known identifiers, IP spray limits, spoofed forwarded chains, missing edge address, simultaneous attempts, and two separate Node processes sharing one database. The trusted Render mode reads only `CF-Connecting-IP`. | Verify the selected edge and production database together in Phase 6 staging. |
+| Audit, privacy, and access policy | `tests/audit-durability.test.ts` injects audit failures and checks rollback of staff, contact, lead, appointment, SMS, call, and worker state. `docs/security-data-policy.md` names sensitive data, access limits, retention gaps, and the disabled live-webhook guard. | Approved retention periods, legal holds, deletion authority, cleanup, backup behavior, and cross-step AI/worker durability are Phase 3 and 4 release gates. |
+
+[CI run 36960844588](https://github.com/ahn009/Aegis/actions/runs/36960844588) passed clean install, Prisma generation, typecheck, lint, 83 isolated tests, and the production build for the final code checkpoint. [CI run 36961036107](https://github.com/ahn009/Aegis/actions/runs/36961036107) passed the same gates after the tracker update.
+
+Phase 1's written exit condition is met: cross-tenant and forged-callback attempts fail in integration tests, and least-privilege roles cannot mutate restricted resources. The handoffs above preserve the real-provider, staging, retention, and reliable-job requirements in their owning phases. No paid resource was created or deployed for this verification.

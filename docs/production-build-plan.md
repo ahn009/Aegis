@@ -1,6 +1,6 @@
 # Velora production build plan
 
-Status: **Phase 0 verified; Phase 1 blocked on staging and retention decisions** · Started: 2026-09-29 · Source of truth for execution: [production-tracker.md](production-tracker.md)
+Status: **Phases 0–1 verified; Phase 2 next** · Started: 2026-09-29 · Source of truth for execution: [production-tracker.md](production-tracker.md)
 
 ## Goal and launch contract
 
@@ -77,6 +77,8 @@ Classify every `mock`, `demo`, `sample`, `stub`, `TODO`, `localhost`, fake `SENT
 4. Add abuse controls, session expiry/rotation tests, audit durability policy, privacy retention and access controls.
 
 **Exit gate:** cross-tenant and forged-callback attempts fail in integration tests; least-privilege user roles cannot mutate restricted resources.
+
+**Exit evidence:** [Phase 1 exit evidence](phase-1-exit-evidence.md). The provider sandbox and deployed proxy checks belong to Phases 2 and 6; retention cleanup and backup behavior belong to Phase 3. The Phase 1 policy records these as release gates, and production callbacks remain disabled.
 
 ### Phase 2 — Real integrations and truthful delivery
 
