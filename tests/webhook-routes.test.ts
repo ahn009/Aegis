@@ -85,7 +85,9 @@ describe("Twilio callback routes", () => {
     const statusPayload = { ...callPayload, CallStatus: "completed" };
     expect((await status(callback("/api/webhooks/call-status", { ...statusPayload, To: "+12145550999" }))).status).toBe(404);
     expect((await status(callback("/api/webhooks/call-status", statusPayload))).status).toBe(200);
-    expect((await db.call.findUniqueOrThrow({ where: { callSid: callPayload.CallSid } })).status).toBe("COMPLETED");
+    const updatedCall = await db.call.findUniqueOrThrow({ where: { callSid: callPayload.CallSid } });
+    expect(updatedCall.status).toBe("COMPLETED");
+    expect(await db.auditLog.count({ where: { organizationId: updatedCall.organizationId, action: "CALL_STATUS_UPDATE", entityId: updatedCall.id } })).toBe(1);
   });
 
   it("rolls back a failed receipt and effect, then completes exactly once on retry", async () => {

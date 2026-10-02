@@ -5,7 +5,7 @@ import { bookAppointment, cancelAppointment, confirmAppointment, releaseExpiredH
 import { createDraftVersion, loadRuleContext, publishVersion } from "../src/lib/rules/engine";
 import { upsertContactByPhone } from "../src/lib/domain/contacts";
 import { handleInboundSms, sendSms } from "../src/lib/domain/messaging";
-import { startInboundCall } from "../src/lib/domain/calls";
+import { endCall, startInboundCall } from "../src/lib/domain/calls";
 import { processOutbox } from "../src/lib/worker/outbox";
 import { executeTool } from "../src/lib/ai/tool-executor";
 
@@ -108,6 +108,17 @@ describe("staff action audit durability", () => {
     const callSid = `audit-call-${Date.now()}`;
     await failAuditDuring(() => startInboundCall({ organizationId: org.id, callSid, fromPhone: phone, toPhone: "+12145550148" }));
     expect(await db.call.count({ where: { callSid } })).toBe(0);
+  });
+
+  it("rolls back call and conversation status when the status audit fails", async () => {
+    const org = await db.organization.findUniqueOrThrow({ where: { slug: "dfw-velora-hvac" } });
+    const started = await startInboundCall({
+      organizationId: org.id, callSid: `audit-end-${Date.now()}`,
+      fromPhone: "+12145550149", toPhone: "+12145550100",
+    });
+    await failAuditDuring(() => endCall(org.id, started.call.id, "COMPLETED", "ENDED"));
+    expect((await db.call.findUniqueOrThrow({ where: { id: started.call.id } })).status).toBe("IN_PROGRESS");
+    expect((await db.conversation.findUniqueOrThrow({ where: { id: started.conversation.id } })).state).toBe("GREETING");
   });
 
   it("does not advance a failed outbox attempt without its audit row", async () => {

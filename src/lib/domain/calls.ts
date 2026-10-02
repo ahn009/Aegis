@@ -61,7 +61,10 @@ export async function startInboundCall(input: InboundCallInput, client: Prisma.T
   return { call, conversation, deduped: false };
 }
 
-export async function endCall(organizationId: string, callId: string, status: string, outcome?: string, client: Prisma.TransactionClient = db) {
+export async function endCall(organizationId: string, callId: string, status: string, outcome?: string, client: Prisma.TransactionClient = db): Promise<void> {
+  if (client === db) return db.$transaction((tx) => endCall(organizationId, callId, status, outcome, tx));
+  const before = await client.call.findUnique({ where: { id: callId, organizationId }, select: { status: true } });
+  if (!before) throw ApiError.notFound("Call not found");
   await client.call.update({
     where: { id: callId, organizationId },
     data: { status, endedAt: new Date() },
@@ -72,6 +75,11 @@ export async function endCall(organizationId: string, callId: string, status: st
       data: { outcome, state: "END" },
     });
   }
+  await auditInTransaction(client, {
+    organizationId, actorType: "WORKER", actorId: "voice-gateway",
+    action: "CALL_STATUS_UPDATE", entityType: "Call", entityId: callId,
+    before: { status: before.status }, after: { status, outcome },
+  });
 }
 
 export async function appendMessage(conversationId: string, role: string, content: string) {
